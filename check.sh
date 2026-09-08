@@ -18,7 +18,7 @@ cd "$HERE"
 
 # One source of truth for what gets linted. A second copy of this list drifts, and a
 # drifted list lies about what was checked.
-scripts=(check.sh check-skill.sh check-pins.sh check-changelog.sh check-readme.sh)
+scripts=(check.sh check-skill.sh check-pins.sh check-changelog.sh)
 skill_name=obsidian-cli
 
 fail() {
@@ -55,49 +55,6 @@ echo "== SKILL.md loads, every reference is reachable, and every link and anchor
 
 echo "== the changelog obeys the versioning skill's rules"
 ./check-changelog.sh -n CHANGELOG.md
-
-echo "== the readme obeys the create-readme skill's rules"
-./check-readme.sh README.md
-
-echo "== and the readme checker is awake — each planted defect is caught, naming it"
-# check-readme.sh travels from another repository and carries no self-test, so this gate
-# runs it against one deliberately broken copy per rule. Without this, a checker that
-# silently stopped reading would read as a green run for as long as nobody looked.
-planted() { # planted NAME EXPECTED-FRAGMENT <<< the broken readme
-  local name="$1" want="$2" out
-  cat >"$work/$name.md"
-  out=$(./check-readme.sh "$work/$name.md" 2>&1) &&
-    fail "the readme checker passed a readme that $name"
-  [[ "$out" == *"$want"* ]] ||
-    fail "the readme checker caught $name for the wrong reason: $out"
-}
-
-planted ends-with-a-full-stop 'full stop' <<'EOF'
-# Title
-
-A paragraph that ends with a full stop.
-EOF
-
-planted hard-wraps-a-paragraph 'one line' <<'EOF'
-# Title
-
-A paragraph that has been hard-wrapped by hand
-across two physical lines
-EOF
-
-planted duplicates-a-file 'own file' <<'EOF'
-# Title
-
-## License
-
-MIT
-EOF
-
-echo "== and stays quiet on the readme this repository actually ships"
-# The other half: a checker that rejects everything would pass every test above while
-# being useless. This is the same file the gate checked, asserted to be accepted
-./check-readme.sh README.md ||
-  fail "the readme checker rejected this repository's own readme — it would cry wolf"
 
 echo "== the skill fits in what an agent loads"
 # A SKILL.md that grows past a couple of hundred lines stops being the routing layer it is

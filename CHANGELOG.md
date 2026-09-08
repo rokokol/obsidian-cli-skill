@@ -2,6 +2,12 @@
 
 Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dated rather than numbered, and with no `Unreleased` section — this repository is read at whatever revision you have checked out, so whatever is on the default branch is what every reader already has
 
+## 2026-09-09
+
+### Removed
+
+- `check-readme.sh` and the gate's readme checks. The rules they enforced belong to the [create-readme](https://github.com/rokokol/create-readme-skill) skill, which is loaded whenever a readme is written or edited, so the gate was deciding the same question a second time — and deciding it against a house style a contributor has no way to know, which is a red run nobody outside can act on. Prose style is now a reading job again; what the gate holds is the skill's own structure and its version claims
+
 ## 2026-09-08
 
 ### Added
