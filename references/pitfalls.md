@@ -68,6 +68,19 @@ Obsidian does not parse links inside ``` fences, so a plugin block full of embed
 
 `links` for that file reports neither. A `grep` for `[[` finds them, which is exactly how a linter that compares its own scan against the CLI ends up disagreeing with itself. The CLI is right about the graph; the grep is right about the text
 
+### Unlinked mentions are not reachable at all
+
+The app's Outgoing links panel shows two lists side by side: unresolved links, and **unlinked mentions** — files whose text contains the note's name or one of its aliases without a wikilink. The CLI exposes only the first. Nor does `eval` help, because the index does not hold them:
+
+```console
+$ obsidian-cli eval code='JSON.stringify(Object.keys(app.metadataCache).filter(k=>/unresolv|link/i.test(k)))'
+=> ["linkUpdaters","resolvedLinks","unresolvedLinks","linkResolverQueue"]
+```
+
+The panel computes them when it opens; `app.internalPlugins.plugins["backlink"]` exposes no result set to read. So a neighbour that a note mentions by name but never links stays invisible to every command in this skill — which matters most to whatever uses `backlinks` to answer "what is related to this note"
+
+The substitute is manual: `search query="<name>"` for the note's name and each of its aliases, then subtract the files that already appear in its `backlinks`. It is not equivalent — search matches substrings and knows nothing about word boundaries or case beyond the `case` flag
+
 ### `total` counts different things per command
 
 `backlinks … total` counts occurrences (12 across 11 files), `orphans total` and `unresolved total` count unique targets, `links … total` counts unique targets after deduplication and anchor stripping. Use `counts` where occurrences are what is wanted

@@ -4,6 +4,12 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 
 ## 2026-09-09
 
+### Added
+
+- what an unresolved target actually is, as a table of kinds with their shares on the measured vault. Only one kind is a defect: most are notes linked ahead of being written, 11 of 60 were template placeholders, 2 were live aliases, and one was an embed written as an explicit path to a file that had since moved — the file existed the whole time, three folders away. That last kind is indistinguishable from a missing file in the output, so the entry says to check the basename against `files` before concluding anything is lost, and why bare-name links survive a move where explicit paths do not
+- the fact that **unlinked mentions are not reachable at all**: the app's Outgoing links panel lists them beside unresolved links, but `app.metadataCache` holds only `resolvedLinks` and `unresolvedLinks`, so neither a command nor `eval` reaches them. A neighbour mentioned by name without a wikilink is invisible to every command in this skill, which matters to anything using `backlinks` to answer "what is related to this note". The manual substitute is given, along with why it is not equivalent
+- how to find a vault's own skills. The closing line already deferred note conventions to "that vault's own skill" while assuming the session could see it; a vault's skills live in `<vault>/.claude/skills/` and the harness offers them only to sessions started under the vault, so from anywhere else they are absent from the skill list while present on disk. The rule now reads: a skill missing from the list was not offered to this session, never that it does not exist
+
 ### Removed
 
 - `check-readme.sh` and the gate's readme checks. The rules they enforced belong to the [create-readme](https://github.com/rokokol/create-readme-skill) skill, which is loaded whenever a readme is written or edited, so the gate was deciding the same question a second time — and deciding it against a house style a contributor has no way to know, which is a red run nobody outside can act on. Prose style is now a reading job again; what the gate holds is the skill's own structure and its version claims

@@ -80,6 +80,21 @@ A vault whose paths contain commas cannot be parsed back out of this reliably. `
 
 Template placeholders show up as unresolved targets, because a template stores `{{date:YYYY-[Week ]ww}}` literally: 11 of 60 targets here were that kind of noise, all from the templates folder
 
+### What an unresolved target actually is
+
+The list mixes several kinds, and only one of them is a defect. On the vault measured, of 60 targets:
+
+| Kind | Share | What it means | The fix |
+|---|---|---|---|
+| a note not written yet | most | someone linked ahead of writing — `6 мая`, `2025-01-24`, an idea box | write the note, or nothing |
+| a template placeholder | 11 | `{{date:…}}` stored literally by a template | none, it is noise |
+| a link through an alias | 2 | the target exists; the index just does not resolve aliases | none, the link works in the app |
+| an explicit path that has gone stale | seen | **the file exists elsewhere** — an embed written as `![[folder/sub/pic.jpg]]` after `pic.jpg` moved | rewrite the link, usually as a bare name |
+
+The last kind is the one worth hunting: it looks identical to a missing file in the output, and the file is right there. Check the basename against `files` before concluding anything is lost. It also argues for bare-name links over explicit paths — Obsidian resolves a bare name vault-wide, so it survives a move
+
+Read as a whole, `unresolved` is closer to a map of intent — what was meant to exist — than to a list of breakages
+
 ## Properties, aliases and tags
 
 ```console

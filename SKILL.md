@@ -52,6 +52,8 @@ Values with spaces need quoting; `\n` and `\t` work inside `content=`. To target
 - **A link written through an alias counts as broken.** Alias resolution is a UI convenience; the index resolves by filename only, so `[[Tun]]` lands in `unresolved` and never appears in the target's `backlinks`. Before calling an unresolved target a broken link, check it against `aliases`
 - **`total` is not one thing.** `backlinks … total` counts occurrences (12 across 11 files here), while `orphans total` and `unresolved total` count unique targets. Use `counts` to get occurrences per file
 - **`links` marks broken targets inline** with a trailing ` (unresolved)` in the plain-text output
+- **An unresolved target is not automatically a defect.** Three kinds share the list and want different answers: a note deliberately not written yet, a typo or an alias link, and a link written as an explicit path to a file that exists somewhere else. Read a sample before treating the list as a repair queue
+- **Unlinked mentions have no command at all.** The app's Outgoing links panel shows them beside unresolved links, but `metadataCache` carries only `resolvedLinks` and `unresolvedLinks`, so `eval` does not reach them either. A neighbour mentioned by name without a wikilink is invisible to every command here; `search query="<name or alias>"` minus the files that already link is the manual substitute
 
 ## Writing
 
@@ -72,4 +74,6 @@ Prefer the CLI over editing files directly: it goes through the app, so the inde
 - [`references/commands.md`](references/commands.md) — output shape, counting semantics and one worked example per command group, all measured on a live vault. What `help` does not tell you
 - [`references/pitfalls.md`](references/pitfalls.md) — every trap above with its reproduction, plus setup problems and the places the official documentation and the local build disagree
 
-This skill covers the CLI only. Conventions for how notes in a particular vault should be written belong to that vault's own skill
+This skill covers the CLI only. Conventions for how notes in a particular vault should be written belong to that vault's own skill — and a vault can carry several, for note style, icons, diagrams or its own tooling
+
+Those skills live in `<vault>/.claude/skills/`, and the harness offers them only to a session started under the vault. From anywhere else they are absent from the skill list while existing on disk, so before writing into a vault, look there and read the relevant `SKILL.md` and its presets by path. A skill missing from the list means it was not offered to this session, never that it does not exist
