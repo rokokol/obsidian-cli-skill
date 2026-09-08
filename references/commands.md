@@ -6,6 +6,8 @@ What the help text omits is the part that decides whether a script is correct: *
 
 A `.md` extension is added where it belongs, so command output can be fed back in as `path=` without adjustment
 
+The examples below are renamed for publication. The vault they were measured on used non-ASCII paths throughout, with spaces, dots and commas in folder names — none of which the CLI had trouble with, though the commas defeat parsing its output, which is a pitfall of its own
+
 ## Output conventions shared by every command
 
 | Property | Behaviour |
@@ -43,9 +45,9 @@ size	15579978623
 ## Link graph
 
 ```console
-$ obsidian-cli backlinks path="02. Проекты/Туннель.md" counts
-02. Проекты/Туннель/Клиент и профили.md	1
-02. Проекты/Туннель/Оплата хостинга.md	2
+$ obsidian-cli backlinks path="02. Projects/Tunnel.md" counts
+02. Projects/Tunnel/Client and profiles.md	1
+02. Projects/Tunnel/Hosting payment.md	2
 ```
 
 | Command | What the number means |
@@ -59,10 +61,10 @@ $ obsidian-cli backlinks path="02. Проекты/Туннель.md" counts
 `links` output is one resolved path per line, with broken targets marked inline:
 
 ```console
-$ obsidian-cli links path="03. Дневник/01. Daily/2026-01-27 Tuesday.md"
-00. Вложения/02. Music/Подкаст — выпуск 14.mp3
-01 Коробка идей (unresolved)
-03. Дневник/01. Daily/2026-01-20 Tuesday.md
+$ obsidian-cli links path="03. Journal/01. Daily/2026-01-27 Tuesday.md"
+00. Attachments/02. Music/Podcast — episode 14.mp3
+01 Idea box (unresolved)
+03. Journal/01. Daily/2026-01-20 Tuesday.md
 ```
 
 What `links` includes and excludes, all verified: embeds (`![[…]]`) and non-markdown targets are **included**; anchors are **stripped** (`[[Note#Heading]]` reports `Note.md`); repeated targets are **collapsed to one**; anything inside a fenced code block is **absent**, because Obsidian does not parse links there
@@ -71,7 +73,7 @@ What `links` includes and excludes, all verified: embeds (`![[…]]`) and non-ma
 
 ```console
 $ obsidian-cli unresolved verbose
-00. Вложения/scans	2	05. Курсы/f00. Анализ — MOC.md, 05. Курсы/f00. Язык — MOC.md
+00. Attachments/scans	2	05. Courses/f00. Analysis — MOC.md, 05. Courses/f00. Language — MOC.md
 ```
 
 A vault whose paths contain commas cannot be parsed back out of this reliably. `eval` is the way out when that matters
@@ -97,7 +99,7 @@ aliases	772
 
 ```console
 $ obsidian-cli search:context query=NixOS limit=1
-05. Курсы/Веб/Деплой в Docker.md:31: [^1]: Контейнер — не виртуальная машина: ядро общее, изоляцию дают …
+05. Courses/Web/Deploying with Docker.md:31: [^1]: A container is not a virtual machine: the kernel is shared, isolation comes from …
 ```
 
 `search` returns file paths, `search:context` returns `path:line: text`. `limit=` caps **files, not matches** — `limit=3` returned 3 files and 7 lines. `total` on `search` is the file count. `case` makes it case-sensitive: 31 hits became 13
@@ -110,8 +112,8 @@ A matching line is printed whole, so a match inside a long paragraph returns tha
 
 ```console
 $ obsidian-cli tasks verbose
-02. Zettelkasten/Идеи на потом.md
-18	1. [f] Центр уведомлений в панели
+02. Zettelkasten/Ideas for later.md
+18	1. [f] Notification centre in the panel
 ```
 
 The line number is what `task ref="path:line"` expects. Status characters beyond `x` and space are preserved and filterable with `status="<char>"`

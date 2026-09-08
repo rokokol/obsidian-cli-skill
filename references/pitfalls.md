@@ -21,9 +21,9 @@ The message goes to **stdout**, so `2>/dev/null` hides nothing and `$(…)` capt
 Unknown flags and parameter names are dropped without a word. A command that no longer has a target falls back to the file open in the GUI, and answers about that instead:
 
 ```console
-$ obsidian-cli backlinks file=Туннель total
+$ obsidian-cli backlinks file=Tunnel total
 12
-$ obsidian-cli backlinks fil=Туннель total
+$ obsidian-cli backlinks fil=Tunnel total
 5
 ```
 
@@ -47,9 +47,9 @@ Writing the file directly with a shell redirect behaves the same way: stale at 0
 Alias resolution happens in the UI. The metadata index resolves by filename only, so an alias link is unresolved in both directions — it appears in `unresolved`, and the target's `backlinks` does not mention it:
 
 ```console
-$ obsidian-cli links path="Ref.md"          # file contains [[Тун]], an alias of Туннель
-Тун (unresolved)
-$ obsidian-cli eval code='JSON.stringify({byAlias:app.metadataCache.getFirstLinkpathDest("Тун","")?.path||null})'
+$ obsidian-cli links path="Ref.md"          # file contains [[Tun]], an alias of Tunnel
+Tun (unresolved)
+$ obsidian-cli eval code='JSON.stringify({byAlias:app.metadataCache.getFirstLinkpathDest("Tun","")?.path||null})'
 => {"byAlias":null}
 ```
 
@@ -114,7 +114,7 @@ obsidian-cli eval code='(async()=>{const f=app.vault.getAbstractFileByPath("note
 
 `aliases verbose` reports a collision as a single record with both paths in one field — which looks like a way to detect one. Plain `aliases` deduplicates and hides it entirely. `unresolved verbose` joins its source files the same way, and `format=json` does not nest them into an array either
 
-**That output cannot be parsed back out**, and the failure is quiet. Vault paths contain commas — a folder named `04. Отчёты, сводки и графики` is enough — so splitting the field on `, ` reports collisions that do not exist: on the vault measured, that method claimed **485** where there were **60**
+**That output cannot be parsed back out**, and the failure is quiet. Vault paths contain commas — a folder named `04. Reports, digests and charts` is enough — so splitting the field on `, ` reports collisions that do not exist: on the vault measured, that method claimed **485** where there were **60**
 
 Ask the index instead. This is the alias map both directions of the problem need, and it is exact:
 
@@ -123,7 +123,7 @@ obsidian-cli eval code='(()=>{const m={};for(const f of app.vault.getMarkdownFil
 ```
 
 ```console
-=> {"34984":["05. Курсы/Сети/Теги и транковые порты.md"],"MOC архитектура":["05. Курсы/Сети/f13. Архитектура — MOC.md"], …}
+=> {"34984":["05. Courses/Networks/Tags and trunk ports.md"],"MOC architecture":["05. Courses/Networks/f13. Architecture — MOC.md"], …}
 ```
 
 Every alias maps to an array of paths, so a collision is an entry with more than one, and membership answers whether an unresolved target is really broken. Append `Object.entries(m).filter(([,v])=>v.length>1)` for the collisions alone — it returned 60 where the text-splitting method returned 485

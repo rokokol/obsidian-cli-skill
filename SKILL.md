@@ -21,7 +21,7 @@ Written against Obsidian **1.13.7 (installer 1.13.4)** on Linux. Behaviour below
 These cost one line each and are the difference between a real answer and a plausible one
 
 1. **Read the output, not the exit status.** Every application-level error — missing file, unknown command, missing parameter — prints `Error: …` and still exits **0**, on **stdout**. `set -e`, `if cmd; then`, and `2>/dev/null` all fail to notice. Check for the `Error: ` prefix
-2. **Always pass a target.** Unknown parameters and flags are ignored in silence, so one typo turns a targeted query into a query about whichever file is open in the GUI: `backlinks fil=Туннель total` answered `5` where `file=` answers `12`. Nothing warns. Prefer `path=` (exact, from the vault root) over `file=` (wikilink-style name resolution) whenever the path is known
+2. **Always pass a target.** Unknown parameters and flags are ignored in silence, so one typo turns a targeted query into a query about whichever file is open in the GUI: `backlinks fil=Tunnel total` answered `5` where `file=` answers `12`. Nothing warns. Prefer `path=` (exact, from the vault root) over `file=` (wikilink-style name resolution) whenever the path is known
 3. **Bound every listing.** These commands stream the whole vault. `search:context` for a common word returned **98 MB** in one call here. Put `limit=` on searches, `total` on counts, and pipe long listings through `grep`/`head` rather than reading them whole
 
 ## Task to command
@@ -49,7 +49,7 @@ Values with spaces need quoting; `\n` and `\t` work inside `content=`. To target
 
 - **Anchors are dropped and targets deduplicated.** `[[Note#Heading|text]]` is reported as `Note.md`; a note linked three times counts once in `links`
 - **Links inside fenced code blocks do not exist.** Obsidian does not parse them, so a `grep` of the file finds links the CLI never reports
-- **A link written through an alias counts as broken.** Alias resolution is a UI convenience; the index resolves by filename only, so `[[Тун]]` lands in `unresolved` and never appears in the target's `backlinks`. Before calling an unresolved target a broken link, check it against `aliases`
+- **A link written through an alias counts as broken.** Alias resolution is a UI convenience; the index resolves by filename only, so `[[Tun]]` lands in `unresolved` and never appears in the target's `backlinks`. Before calling an unresolved target a broken link, check it against `aliases`
 - **`total` is not one thing.** `backlinks … total` counts occurrences (12 across 11 files here), while `orphans total` and `unresolved total` count unique targets. Use `counts` to get occurrences per file
 - **`links` marks broken targets inline** with a trailing ` (unresolved)` in the plain-text output
 
