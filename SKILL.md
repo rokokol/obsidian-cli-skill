@@ -1,0 +1,75 @@
+---
+name: obsidian-cli
+description: "Drive a running Obsidian vault from the terminal through the official Obsidian CLI — read and write notes, query the link graph, search, manage properties, tags and tasks. Use whenever a request needs vault data or a vault operation rather than an explanation of Obsidian's UI. Russian triggers: обсидиан, обсидиан цли, обсидиан кли, обсидианкли, волт, вики, заметка, заметки, моя вики, найди в заметках, создай заметку, обратные ссылки, бэклинки, битые ссылки, сироты, теги заметок, свойства заметки, алиасы"
+license: MIT
+---
+
+# Obsidian CLI
+
+The official CLI ships with Obsidian 1.12+. It is a thin client that talks to a **running** Obsidian app over a unix socket — not a standalone vault reader. Everything it reports comes from the app's own index, so it sees the vault exactly as Obsidian does
+
+Written against Obsidian **1.13.7 (installer 1.13.4)** on Linux. Behaviour below was measured, not copied from the help text
+
+## Before the first call
+
+1. **Find the binary.** The name depends on how Obsidian was installed: the app registers `obsidian`, but package managers may ship the client as `obsidian-cli` while `obsidian` stays the GUI launcher. Run `command -v obsidian-cli obsidian`, then confirm the candidate answers `version` with two numbers. Calling a GUI launcher instead opens a second window
+2. **Confirm the app is running.** With no reachable app every call prints `The CLI is unable to find Obsidian. Please make sure Obsidian is running and try again` and exits **1** — the only condition that sets a non-zero status. Do not expect the CLI to start Obsidian for you; on a packaged install it does not
+3. **Ask the app what it can do.** `<cli> help` lists the commands available *right now*. The list is not fixed: `daily:*`, `unique`, `web`, `workspaces`, `publish:*` and `sync:*` appear only when the matching core plugin or service is enabled. Treat `help` as the reference and never guess a command from documentation
+
+## The three rules that prevent wrong answers
+
+These cost one line each and are the difference between a real answer and a plausible one
+
+1. **Read the output, not the exit status.** Every application-level error — missing file, unknown command, missing parameter — prints `Error: …` and still exits **0**, on **stdout**. `set -e`, `if cmd; then`, and `2>/dev/null` all fail to notice. Check for the `Error: ` prefix
+2. **Always pass a target.** Unknown parameters and flags are ignored in silence, so one typo turns a targeted query into a query about whichever file is open in the GUI: `backlinks fil=Туннель total` answered `5` where `file=` answers `12`. Nothing warns. Prefer `path=` (exact, from the vault root) over `file=` (wikilink-style name resolution) whenever the path is known
+3. **Bound every listing.** These commands stream the whole vault. `search:context` for a common word returned **98 MB** in one call here. Put `limit=` on searches, `total` on counts, and pipe long listings through `grep`/`head` rather than reading them whole
+
+## Task to command
+
+| Task | Command |
+| --- | --- |
+| Read a note | `read path="folder/note.md"` |
+| Structure without the body | `outline path=…`, `properties path=…`, `wordcount path=…` |
+| Neighbours of a note | `backlinks path=…`, `links path=…` |
+| Find text | `search query=… limit=10`, `search:context query=… limit=5` for matching lines |
+| Vault-wide metadata | `tags counts sort=count`, `properties counts sort=count`, `aliases verbose` |
+| Broken links | `unresolved verbose` |
+| Unlinked notes | `orphans`, `deadends` |
+| Tasks | `tasks todo verbose`, `task ref="note.md:8" toggle` |
+| Create or overwrite | `create path=… content=… overwrite` |
+| Add to a note | `append path=… content=…`, `prepend path=… content=…` (lands after the frontmatter) |
+| Set one property | `property:set path=… name=… value=… type=list` |
+| Anything the CLI has no command for | `eval code=…` against the app's own API |
+
+Values with spaces need quoting; `\n` and `\t` work inside `content=`. To target another vault, `vault=<name>` must come **before** the command word — a bare vault name as the first argument is not accepted
+
+## Reading the graph
+
+`links`, `backlinks` and `unresolved` read Obsidian's metadata index, which has consequences worth knowing before trusting a count:
+
+- **Anchors are dropped and targets deduplicated.** `[[Note#Heading|text]]` is reported as `Note.md`; a note linked three times counts once in `links`
+- **Links inside fenced code blocks do not exist.** Obsidian does not parse them, so a `grep` of the file finds links the CLI never reports
+- **A link written through an alias counts as broken.** Alias resolution is a UI convenience; the index resolves by filename only, so `[[Тун]]` lands in `unresolved` and never appears in the target's `backlinks`. Before calling an unresolved target a broken link, check it against `aliases`
+- **`total` is not one thing.** `backlinks … total` counts occurrences (12 across 11 files here), while `orphans total` and `unresolved total` count unique targets. Use `counts` to get occurrences per file
+- **`links` marks broken targets inline** with a trailing ` (unresolved)` in the plain-text output
+
+## Writing
+
+Prefer the CLI over editing files directly: it goes through the app, so the index and any open editor stay in step
+
+- `property:set` **without `type=`** writes a scalar, and overwriting an existing YAML list that way silently flattens it to one line. Pass `type=list` for `tags`, `aliases` and every multi-valued field
+- With `type=list` the comma is the item separator and **there is no escape**: neither `\,` nor quoting survives, so a value containing a comma cannot be written this way. `property:set` also replaces the whole list rather than appending
+- For a list item containing a comma, for several fields at once, or for any append, go through the app's API instead — this writes correct YAML and keeps the index consistent:
+
+  ```bash
+  eval code='(async()=>{const f=app.vault.getAbstractFileByPath("folder/note.md");await app.fileManager.processFrontMatter(f,fm=>{fm.aliases=["Smith, John","Plain"]});return "ok"})()'
+  ```
+
+- **Indexing is asynchronous.** A graph query fired immediately after a write can answer from the previous state — 9 of 20 immediate reads did here, 0 of 20 after 0.3 s. Re-read before reporting success rather than trusting the write
+
+## Reference
+
+- [`references/commands.md`](references/commands.md) — output shape, counting semantics and one worked example per command group, all measured on a live vault. What `help` does not tell you
+- [`references/pitfalls.md`](references/pitfalls.md) — every trap above with its reproduction, plus setup problems and the places the official documentation and the local build disagree
+
+This skill covers the CLI only. Conventions for how notes in a particular vault should be written belong to that vault's own skill

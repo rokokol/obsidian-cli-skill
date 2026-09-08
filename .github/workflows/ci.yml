@@ -1,0 +1,22 @@
+name: ci
+
+# Nothing here reaches a mirror, a :latest image or a live site, so it is a gate rather
+# than a detector and pull requests run it too
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - name: check.sh (the gate, self-tested against known-bad fixtures)
+        run: nix develop --no-write-lock-file -c ./check.sh
