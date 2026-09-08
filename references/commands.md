@@ -89,9 +89,11 @@ The list mixes several kinds, and only one of them is a defect. On the vault mea
 | a note not written yet | most | someone linked ahead of writing — `6 мая`, `2025-01-24`, an idea box | write the note, or nothing |
 | a template placeholder | 11 | `{{date:…}}` stored literally by a template | none, it is noise |
 | a link through an alias | 2 | the target exists; the index just does not resolve aliases | none, the link works in the app |
-| an explicit path that has gone stale | seen | **the file exists elsewhere** — an embed written as `![[folder/sub/pic.jpg]]` after `pic.jpg` moved | rewrite the link, usually as a bare name |
+| a link written as an explicit path | seen | **the file exists elsewhere** — `![[folder/sub/pic.jpg]]` after `pic.jpg` moved | rewrite it as `![[pic.jpg]]` |
 
-The last kind is the one worth hunting: it looks identical to a missing file in the output, and the file is right there. Check the basename against `files` before concluding anything is lost. It also argues for bare-name links over explicit paths — Obsidian resolves a bare name vault-wide, so it survives a move
+The last kind is the one worth hunting: it looks identical to a missing file in the output, and the file is right there. Check the basename against `files` before concluding anything is lost
+
+It is also avoidable, because the path in a wikilink is not what makes it resolve. Obsidian resolves `[[pic.jpg]]` by name across the whole vault, so a bare-name link keeps working after the file is moved, while `[[folder/sub/pic.jpg]]` breaks the moment anything above the file changes — and breaks silently, since a missing embed looks like an empty spot rather than an error. Write the name alone; reach for a path only where the basename is genuinely ambiguous, which is the one case a bare name cannot express
 
 Read as a whole, `unresolved` is closer to a map of intent — what was meant to exist — than to a list of breakages
 
