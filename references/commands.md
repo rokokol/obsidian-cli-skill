@@ -23,6 +23,14 @@ The examples below are renamed for publication. The vault they were measured on 
 
 Empty-result sentences are the reason to test for the `Error: ` prefix rather than for empty output — the two are different states
 
+`format=` is not a global flag. Thirteen of the 92 commands available here advertise one, and a command that does not advertise it ignores it in silence like any other unknown parameter: `aliases verbose format=json` prints the same bytes as `aliases verbose`. Derive the set from the machine rather than trusting that number:
+
+```bash
+obsidian-cli help | awk '/^  [a-z][a-z0-9:.-]*  +/ { cmd = $1 } /format=/ && cmd { print cmd, $0 }'
+```
+
+Where JSON is produced it reads as the tab-separated rows wrapped rather than the data serialised, which is what makes every value a string. `properties counts format=json` is the one exception measured — `"count": 777`, a real number — and it is also the one command whose format list reads `yaml|json|tsv` rather than `json|tsv|csv`. Coerce the numbers yourself, and do not let that one honest field suggest the others are typed
+
 ## Vault-wide listings
 
 ```console
@@ -151,4 +159,11 @@ obsidian-cli eval code='(async()=>{const f=app.vault.getAbstractFileByPath("note
 
 `await` inside an async IIFE is resolved before printing. Useful entry points: `app.vault`, `app.metadataCache.resolvedLinks`, `app.metadataCache.unresolvedLinks`, `app.metadataCache.getCache(path)`, `app.fileManager.processFrontMatter`
 
-Keep the code on one line. It is the same interpreter the app runs on, so a bad expression can disturb a live session — read before you write, and test on a throwaway note
+The code does not have to be one line — a multi-line function body passed as a single shell argument runs fine, and a string returned with newlines in it prints as several lines, with `=> ` on the first only. **This corrects an earlier reading**, which said to keep it on one line; the constraint was the shell's quoting, never the CLI's
+
+It is the same interpreter the app runs on, so a bad expression can disturb a live session — read before you write, and test on a throwaway note. Embedding a path by quoting it is the fragile part: base64 the value and decode it inside the code instead, which survives quotes, commas and non-ASCII alike
+
+```bash
+b=$(printf '%s' "$path" | base64 | tr -d '\n')
+obsidian-cli eval code="(()=>{const p=new TextDecoder().decode(Uint8Array.from(atob('$b'),c=>c.charCodeAt(0)));return Object.keys(app.metadataCache.resolvedLinks[p]||{}).length})()"
+```

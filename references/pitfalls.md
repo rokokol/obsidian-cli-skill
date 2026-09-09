@@ -40,6 +40,27 @@ A graph query issued immediately after a write can be answered from the pre-writ
 
 Writing the file directly with a shell redirect behaves the same way: stale at 0 s, fresh from 0.2 s. Writing through the CLI is still preferable — it keeps any open editor in step — but neither route makes the index synchronous. Re-read before reporting success
 
+### The CLI reads stdin, so a `while read` loop runs once
+
+The loop below is the obvious way to visit every note, and it visits one:
+
+```console
+$ obsidian-cli files | grep '\.md$' > list
+$ wc -l < list
+1296
+$ while IFS= read -r f; do obsidian-cli links path="$f"; done < list | wc -l
+1
+```
+
+The CLI consumes the rest of the list from stdin on its first call, so `read` finds nothing left and the loop ends. There is no error, no warning and no empty output — the run takes 3 ms instead of 1.5 s and prints a plausible-looking result for the first file only. The one-word fix is to close stdin on the inner call:
+
+```console
+$ while IFS= read -r f; do obsidian-cli links path="$f" </dev/null; done < list | wc -l
+7161
+```
+
+The same applies to `xargs`, to `find -exec … \;` and to any loop reading from a pipe. Give every call `</dev/null` unless you are deliberately feeding it something
+
 ## The link graph is Obsidian's, not the file's
 
 ### A link through an alias counts as broken
@@ -85,6 +106,19 @@ The substitute is manual: `search query="<name>"` for the note's name and each o
 
 `backlinks … total` counts occurrences (12 across 11 files), `orphans total` and `unresolved total` count unique targets, `links … total` counts unique targets after deduplication and anchor stripping. Use `counts` where occurrences are what is wanted
 
+### Filenames resolve without regard to case
+
+`[[keyboard]]`, `[[KEYBOARD]]` and `[[Keyboard]]` all reach `Keyboard.md`. Measured in the sandbox vault, one note carrying all three:
+
+```console
+$ obsidian-cli links path="Case/refers.md"
+Case/Keyboard.md
+$ obsidian-cli backlinks path="Case/Keyboard.md" counts
+Case/refers.md	3
+```
+
+One target in `links`, because targets are deduplicated, and three occurrences in `backlinks … counts`. Anything comparing a link's text to a filename with an exact string comparison will therefore report broken links that the app resolves perfectly well. The comparison to make is case-folded — and if the vault ever holds two notes whose names differ only in case, that is its own defect, because nothing then says which one a link opens
+
 ### Anchors never survive
 
 `[[Note#Heading|label]]` is reported as `Note.md`. There is no command that returns the anchor, so unused-heading analysis cannot be built on `links`
@@ -125,9 +159,11 @@ obsidian-cli eval code='(async()=>{const f=app.vault.getAbstractFileByPath("note
 
 ### An alias on two files collapses into one comma-joined line
 
-`aliases verbose` reports a collision as a single record with both paths in one field — which looks like a way to detect one. Plain `aliases` deduplicates and hides it entirely. `unresolved verbose` joins its source files the same way, and `format=json` does not nest them into an array either
+`aliases verbose` reports a collision as a single record with both paths in one field — which looks like a way to detect one. Plain `aliases` deduplicates and hides it entirely. `unresolved verbose` joins its source files the same way
 
 **That output cannot be parsed back out**, and the failure is quiet. Vault paths contain commas — a folder named `04. Reports, digests and charts` is enough — so splitting the field on `, ` reports collisions that do not exist: on the vault measured, that method claimed **485** where there were **60**
+
+No output format rescues it, because the join happens before any formatter runs. `aliases` advertises no `format=` at all, so passing one is ignored in silence. `unresolved` advertises `format=json|tsv|csv` and honours it, and both formats stay ambiguous in their own well-formed way: JSON keeps the joined string in `sources`, CSV quotes it correctly as a single value. `"Proxy ARP, DHCP and address types.md"` is one file whose name contains a comma; `"Calculus — MOC.md, English — MOC.md"` is two files; the output does not distinguish them. `count` cannot settle it either, since it counts occurrences of the link rather than source files — `{{date:YYYY-[Quarter ]Q}}` reports 2 against a single source file
 
 Ask the index instead. This is the alias map both directions of the problem need, and it is exact:
 
