@@ -1,6 +1,6 @@
 ---
 name: obsidian-cli
-description: "Drive a running Obsidian vault from the terminal through the official Obsidian CLI — read and write notes, query the link graph, search, manage properties, tags and tasks. Use whenever a request needs vault data or a vault operation rather than an explanation of Obsidian's UI. Russian triggers: обсидиан, обсидиан цли, обсидиан кли, обсидианкли, волт, вики, заметка, заметки, моя вики, найди в заметках, создай заметку, обратные ссылки, бэклинки, битые ссылки, сироты, теги заметок, свойства заметки, алиасы"
+description: "Drive a running Obsidian vault from the terminal through the official Obsidian CLI — read and write notes, find a note by name, alias, tag or property, query and summarise the whole link graph, search, manage properties, tags and tasks. Use whenever a request needs vault data or a vault operation rather than an explanation of Obsidian's UI. Russian triggers: обсидиан, обсидиан цли, обсидиан кли, обсидианкли, волт, вики, заметка, заметки, моя вики, найди в заметках, найди заметку, как называется заметка, поиск по алиасу, создай заметку, обратные ссылки, бэклинки, битые ссылки, сироты, теги заметок, свойства заметки, алиасы, граф заметок, граф связей, связность вики, острова заметок, изолированные заметки, самые цитируемые заметки, путь между заметками"
 license: MIT
 ---
 
@@ -16,13 +16,14 @@ Written against Obsidian **1.13.7 (installer 1.13.4)** on Linux. Behaviour below
 2. **Confirm the app is running.** With no reachable app every call prints `The CLI is unable to find Obsidian. Please make sure Obsidian is running and try again` and exits **1** — the only condition that sets a non-zero status. Do not expect the CLI to start Obsidian for you; on a packaged install it does not
 3. **Ask the app what it can do.** `<cli> help` lists the commands available *right now*. The list is not fixed: `daily:*`, `unique`, `web`, `workspaces`, `publish:*` and `sync:*` appear only when the matching core plugin or service is enabled. Treat `help` as the reference and never guess a command from documentation
 
-## The three rules that prevent wrong answers
+## The four rules that prevent wrong answers
 
 These cost one line each and are the difference between a real answer and a plausible one
 
 1. **Read the output, not the exit status.** Every application-level error — missing file, unknown command, missing parameter — prints `Error: …` and still exits **0**, on **stdout**. `set -e`, `if cmd; then`, and `2>/dev/null` all fail to notice. Check for the `Error: ` prefix
 2. **Always pass a target.** Unknown parameters and flags are ignored in silence, so one typo turns a targeted query into a query about whichever file is open in the GUI: `backlinks fil=Tunnel total` answered `5` where `file=` answers `12`. Nothing warns. Prefer `path=` (exact, from the vault root) over `file=` (wikilink-style name resolution) whenever the path is known
 3. **Bound every listing.** These commands stream the whole vault. `search:context` for a common word returned **98 MB** in one call here. Put `limit=` on searches, `total` on counts, and pipe long listings through `grep`/`head` rather than reading them whole
+4. **Close stdin on every call in a loop.** The CLI reads stdin, so `while IFS= read -r f; do <cli> links path="$f"; done < list` consumes the list on its first call and ends after one file, silently and 500 times too fast. Add `</dev/null` to the inner call
 
 ## Task to command
 
@@ -32,6 +33,7 @@ These cost one line each and are the difference between a real answer and a plau
 | Structure without the body | `outline path=…`, `properties path=…`, `wordcount path=…` |
 | Neighbours of a note | `backlinks path=…`, `links path=…` |
 | Find text | `search query=… limit=10`, `search:context query=… limit=5` for matching lines |
+| Find the note itself, not just the text mentioning it | `obsi.sh find "…" [--alias\|--tag\|--name\|--prop …]` |
 | Vault-wide metadata | `tags counts sort=count`, `properties counts sort=count`, `aliases verbose` |
 | Broken links | `unresolved verbose` |
 | Unlinked notes | `orphans`, `deadends` |
@@ -39,9 +41,12 @@ These cost one line each and are the difference between a real answer and a plau
 | Create or overwrite | `create path=… content=… overwrite` |
 | Add to a note | `append path=… content=…`, `prepend path=… content=…` (lands after the frontmatter) |
 | Set one property | `property:set path=… name=… value=… type=list` |
+| The vault's graph as a whole | `obsi.sh graph`, then `hubs`, `ends`, `components`, `path`, `dump` |
 | Anything the CLI has no command for | `eval code=…` against the app's own API |
 
 Values with spaces need quoting; `\n` and `\t` work inside `content=`. To target another vault, `vault=<name>` must come **before** the command word — a bare vault name as the first argument is not accepted
+
+[`obsi.sh`](obsi.sh) sits beside this file and wraps the CLI rather than replacing it: anything it does not recognise passes through with rules 1 and 4 applied. `search` already matches a filename, an alias, a tag, a property value and a heading alike, because the frontmatter is part of the file's text — what it cannot do is say **which** of those matched or be restricted to one, and that is all `find` adds to it. `graph` reaches the link graph, which no command exposes, and never prints it whole. Flags and limits — [`references/obsi.md`](references/obsi.md)
 
 ## Reading the graph
 
@@ -74,6 +79,6 @@ Prefer the CLI over editing files directly: it goes through the app, so the inde
 - [`references/commands.md`](references/commands.md) — output shape, counting semantics and one worked example per command group, all measured on a live vault. What `help` does not tell you
 - [`references/pitfalls.md`](references/pitfalls.md) — every trap above with its reproduction, plus setup problems and the places the official documentation and the local build disagree
 
-This skill covers the CLI only. Conventions for how notes in a particular vault should be written belong to that vault's own skill — and a vault can carry several, for note style, icons, diagrams or its own tooling
+This skill covers the CLI only. How a particular vault's notes are written and organised — style, indexes, icons, diagrams, its own tooling — is set somewhere else, if it is set at all: most often by skills the vault carries itself, one per concern. Do not assume those rules exist, and do not invent them where they do not
 
-Those skills live in `<vault>/.claude/skills/`, and the harness offers them only to a session started under the vault. From anywhere else they are absent from the skill list while existing on disk, so before writing into a vault, look there and read the relevant `SKILL.md` and its presets by path. A skill missing from the list means it was not offered to this session, never that it does not exist
+Where such a skill lives depends on the agent — whichever skills directory it reads, under the vault, which for Claude Code is `<vault>/.claude/skills/`. The harness offers them only to a session started under the vault, so from anywhere else they are absent from the skill list while existing on disk. Before writing into a vault, look in that directory and read the relevant `SKILL.md` and its presets by path. A skill missing from the list means it was not offered to this session, never that it does not exist

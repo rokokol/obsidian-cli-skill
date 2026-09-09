@@ -18,7 +18,7 @@ cd "$HERE"
 
 # One source of truth for what gets linted. A second copy of this list drifts, and a
 # drifted list lies about what was checked.
-scripts=(check.sh check-skill.sh check-pins.sh check-changelog.sh)
+scripts=(check.sh check-skill.sh check-pins.sh check-changelog.sh check-obsi.sh obsi.sh tests/stub-cli.sh)
 skill_name=obsidian-cli
 
 fail() {
@@ -53,6 +53,12 @@ echo "== SKILL.md loads, every reference is reachable, and every link and anchor
 # a defect per check on every run, so nothing here has to prove it separately
 ./check-skill.sh -n "$skill_name" .
 
+echo "== the wrapper's shell half behaves, against a fake CLI"
+# The graph and find queries are JavaScript run inside the app and no stub can execute them,
+# so what this covers is everything the shell owns — and it plants a defect per check on
+# every run, each one a bug that was actually hit while the wrapper was written
+./check-obsi.sh .
+
 echo "== the changelog obeys the versioning skill's rules"
 ./check-changelog.sh -n CHANGELOG.md
 
@@ -78,7 +84,7 @@ echo "== every document states the version its measurements came from"
 # A number with no version beside it cannot be checked by the next reader, which is the
 # only thing that makes these claims falsifiable rather than folklore
 version_claim='1\.13\.7'
-for f in SKILL.md references/commands.md references/pitfalls.md; do
+for f in SKILL.md references/commands.md references/pitfalls.md references/obsi.md; do
   grep -qE "$version_claim" "$f" ||
     fail "$f states behaviour without naming the version it was measured on"
 done
