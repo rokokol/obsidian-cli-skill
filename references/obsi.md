@@ -34,9 +34,9 @@ It matches the file's text, and the frontmatter is part of the text. So `find` i
 The difference in one query, on the vault measured:
 
 ```console
-$ obsidian-cli vault=Vault search query=unicast limit=5000 | wc -l
+$ obsidian-cli vault=Vault search query=coastline limit=5000 | wc -l
 6
-$ ./obsi.sh --vault Vault find unicast --alias | wc -l
+$ ./obsi.sh --vault Vault find coastline --alias | wc -l
 2
 ```
 
@@ -45,15 +45,15 @@ Six notes contain the word; two of them *answer to* it. `search` returns all six
 So `find` reads names, tags, properties and headings from the metadata index, takes bodies from `search`, and merges the two into one ranked list:
 
 ```console
-$ ./obsi.sh --vault Vault find unicast --alias
-9	alias	05. Networks/…/Proxy ARP, DHCP and address types.md	unicast
-9	alias	05. Networks/…/Address types.md	unicast
+$ ./obsi.sh --vault Vault find coastline --alias
+9	alias	05. Courses/…/Tides, currents and coastlines.md	coastline
+9	alias	05. Courses/…/Coastlines.md	coastline
 ```
 
 Both files of an alias collision, including the one whose path contains a comma — which is exactly what the first-party listing cannot express
 
 ```
-obsi.sh find QUERY [--name] [--alias] [--tag] [--heading] [--body] [--prop NAME[=VALUE]] [--limit N]
+obsi.sh find QUERY [--name] [--alias] [--tag] [--heading] [--body] [--value] [--prop NAME[=VALUE]] [--limit N]
 ```
 
 Columns are **score**, **why it matched** (several joined by `+`), **path**, and **what matched**. Matching is case-insensitive substring. With no marker flag every marker is used at once; naming one or more narrows to those. `--limit` defaults to 20, and an empty result is the sentence `No matches found.`, the way the CLI answers one
@@ -63,7 +63,7 @@ Columns are **score**, **why it matched** (several joined by `+`), **path**, and
 | filename | 10 | 6 |
 | alias | 9 | 5 |
 | tag | — | 4 |
-| property value | — | 4 |
+| property value (`--value`) | — | 4 |
 | heading | — | 3 |
 | text — anything `search` matched, frontmatter included | — | 1 |
 
@@ -74,16 +74,18 @@ Where the ranking stops meaning anything is a marker that scores every hit ident
 ```console
 $ ./obsi.sh --vault Vault find "lecture-notes" --tag --limit 3
 4	tag	01. Data/03. Templates/01. Templates/lecture notes.md	#lecture-notes
-4	tag	03. Journal/…/Client on sing-box.md	#lecture-notes
-4	tag	03. Journal/…/Blocking methods.md	#lecture-notes
+4	tag	03. Journal/…/Pruning roses.md	#lecture-notes
+4	tag	03. Journal/…/Composting basics.md	#lecture-notes
 …	646 more matches at or below this score, raise --limit to see them
 ```
 
 Announcing it is harder than it looks, and the first attempt printed nothing. `head` stops reading at its count, the shell builtin feeding it takes SIGPIPE, and under `set -o pipefail` the wrapper died at **141** on that line — after the rows had already appeared, so it read as a finished command. Note that this is a shell trap, not a CLI one: `obsidian-cli files | head -n 3` leaves `PIPESTATUS` at 0 even at 572 KB of output, because the client is Node and swallows EPIPE. `awk 'NR <= n'` reads to the end and leaves the status alone
 
-Every tag a note carries is matched, in both places Obsidian keeps them: `cache.tags` for inline ones and `frontmatter.tags` for the rest — 5979 frontmatter tags against 16 inline on that vault, so a tag search that only read the inline ones would have found almost nothing
+Every tag a note carries is matched, in both places Obsidian keeps them: `cache.tags` for inline ones and `frontmatter.tags` for the rest — 5979 frontmatter tags against 16 inline on that vault, so a tag search that only read the inline ones would have found almost nothing. `tags` and `aliases` are read the way Obsidian reads them: a string is one item and is never split on commas, a list is taken item by item, and a tag holding a space is no tag at all — so `tags: a, b` carries no tags, as in Obsidian's own tag pane
 
 `--prop NAME` keeps only notes that have that property, `--prop NAME=VALUE` only those where it holds that value. The filter is applied to the body half too — `search` knows nothing about it, and without that step it would quietly filter half the results
+
+`--value` narrows the match to property values, as the other markers narrow to theirs; beside `--prop NAME` it looks at that property's values alone, so `find draft --value --prop status` asks for draft in `status` rather than in every property of the notes that have one
 
 ## `graph` — the vault's shape
 
@@ -129,9 +131,9 @@ That last condition is what makes the query usable. Without it, on the vault mea
 `--tag-max-notes N` is how many notes a tag may be on and still count as a signal — **not** a number of tags. A tag on five notes says those five are about one thing; a tag on 649 says only that the vault has a category. It defaults to a twentieth of the vault, and the three settings on the same note gave 18, 51 and 873 results:
 
 ```console
-$ ./obsi.sh --vault Vault graph related "…/Address types.md" --tag-max-notes 0       # structure only
-$ ./obsi.sh --vault Vault graph related "…/Address types.md"                         # the default
-$ ./obsi.sh --vault Vault graph related "…/Address types.md" --tag-max-notes 100000  # every tag counts
+$ ./obsi.sh --vault Vault graph related "…/Coastlines.md" --tag-max-notes 0       # structure only
+$ ./obsi.sh --vault Vault graph related "…/Coastlines.md"                         # the default
+$ ./obsi.sh --vault Vault graph related "…/Coastlines.md" --tag-max-notes 100000  # every tag counts
 ```
 
 The threshold is a cliff rather than a curve — a tag on 65 notes counts fully and one on 66 not at all — which is why it is a flag and not a secret. A vault whose tags are all narrow wants a higher one; a vault tagged by topic wants `--tag-max-notes 0`

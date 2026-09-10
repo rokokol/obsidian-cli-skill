@@ -53,9 +53,9 @@ size	15579978623
 ## Link graph
 
 ```console
-$ obsidian-cli backlinks path="02. Projects/Tunnel.md" counts
-02. Projects/Tunnel/Client and profiles.md	1
-02. Projects/Tunnel/Hosting payment.md	2
+$ obsidian-cli backlinks path="02. Projects/Garden.md" counts
+02. Projects/Garden/Beds and layout.md	1
+02. Projects/Garden/Seed orders.md	2
 ```
 
 | Command | What the number means |
@@ -94,7 +94,7 @@ The list mixes several kinds, and only one of them is a defect. On the vault mea
 
 | Kind | Share | What it means | The fix |
 |---|---|---|---|
-| a note not written yet | most | someone linked ahead of writing — `6 мая`, `2025-01-24`, an idea box | write the note, or nothing |
+| a note not written yet | most | someone linked ahead of writing — `May 6`, `2025-01-24`, an idea box | write the note, or nothing |
 | a template placeholder | 11 | `{{date:…}}` stored literally by a template | none, it is noise |
 | a link through an alias | 2 | the target exists; the index just does not resolve aliases | none, the link works in the app |
 | a link written as an explicit path | seen | **the file exists elsewhere** — `![[folder/sub/pic.jpg]]` after `pic.jpg` moved | rewrite it as `![[pic.jpg]]` |

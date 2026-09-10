@@ -21,9 +21,9 @@ The message goes to **stdout**, so `2>/dev/null` hides nothing and `$(…)` capt
 Unknown flags and parameter names are dropped without a word. A command that no longer has a target falls back to the file open in the GUI, and answers about that instead:
 
 ```console
-$ obsidian-cli backlinks file=Tunnel total
+$ obsidian-cli backlinks file=Garden total
 12
-$ obsidian-cli backlinks fil=Tunnel total
+$ obsidian-cli backlinks fil=Garden total
 5
 ```
 
@@ -85,9 +85,9 @@ The same applies to `xargs`, to `find -exec … \;` and to any loop reading from
 Alias resolution happens in the UI. The metadata index resolves by filename only, so an alias link is unresolved in both directions — it appears in `unresolved`, and the target's `backlinks` does not mention it:
 
 ```console
-$ obsidian-cli links path="Ref.md"          # file contains [[Tun]], an alias of Tunnel
-Tun (unresolved)
-$ obsidian-cli eval code='JSON.stringify({byAlias:app.metadataCache.getFirstLinkpathDest("Tun","")?.path||null})'
+$ obsidian-cli links path="Ref.md"          # file contains [[Plot]], an alias of Garden
+Plot (unresolved)
+$ obsidian-cli eval code='JSON.stringify({byAlias:app.metadataCache.getFirstLinkpathDest("Plot","")?.path||null})'
 => {"byAlias":null}
 ```
 
@@ -180,7 +180,7 @@ obsidian-cli eval code='(async()=>{const f=app.vault.getAbstractFileByPath("note
 
 **That output cannot be parsed back out**, and the failure is quiet. Vault paths contain commas — a folder named `04. Reports, digests and charts` is enough — so splitting the field on `, ` reports collisions that do not exist: on the vault measured, that method claimed **485** where there were **60**
 
-No output format rescues it, because the join happens before any formatter runs. `aliases` advertises no `format=` at all, so passing one is ignored in silence. `unresolved` advertises `format=json|tsv|csv` and honours it, and both formats stay ambiguous in their own well-formed way: JSON keeps the joined string in `sources`, CSV quotes it correctly as a single value. `"Proxy ARP, DHCP and address types.md"` is one file whose name contains a comma; `"Calculus — MOC.md, English — MOC.md"` is two files; the output does not distinguish them. `count` cannot settle it either, since it counts occurrences of the link rather than source files — `{{date:YYYY-[Quarter ]Q}}` reports 2 against a single source file
+No output format rescues it, because the join happens before any formatter runs. `aliases` advertises no `format=` at all, so passing one is ignored in silence. `unresolved` advertises `format=json|tsv|csv` and honours it, and both formats stay ambiguous in their own well-formed way: JSON keeps the joined string in `sources`, CSV quotes it correctly as a single value. `"Tides, currents and coastlines.md"` is one file whose name contains a comma; `"Calculus — MOC.md, English — MOC.md"` is two files; the output does not distinguish them. `count` cannot settle it either, since it counts occurrences of the link rather than source files — `{{date:YYYY-[Quarter ]Q}}` reports 2 against a single source file
 
 Ask the index instead. This is the alias map both directions of the problem need, and it is exact:
 
@@ -189,7 +189,7 @@ obsidian-cli eval code='(()=>{const m={};for(const f of app.vault.getMarkdownFil
 ```
 
 ```console
-=> {"34984":["05. Courses/Networks/Tags and trunk ports.md"],"MOC architecture":["05. Courses/Networks/f13. Architecture — MOC.md"], …}
+=> {"34984":["05. Courses/Sea/Tide tables.md"],"MOC currents":["05. Courses/Sea/f13. Currents — MOC.md"], …}
 ```
 
 Every alias maps to an array of paths, so a collision is an entry with more than one, and membership answers whether an unresolved target is really broken. Append `Object.entries(m).filter(([,v])=>v.length>1)` for the collisions alone — it returned 60 where the text-splitting method returned 485
