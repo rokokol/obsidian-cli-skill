@@ -161,6 +161,8 @@ obsidian-cli eval code='(async()=>{const f=app.vault.getAbstractFileByPath("note
 
 The code does not have to be one line — a multi-line function body passed as a single shell argument runs fine, and a string returned with newlines in it prints as several lines, with `=> ` on the first only. **This corrects an earlier reading**, which said to keep it on one line; the constraint was the shell's quoting, never the CLI's
 
+What the code logs is printed too, above the result: `console.log("side-channel")` inside the code shows as a `side-channel` line before `=> value`. A script parsing `eval` takes the line that starts with `=> `, not the first line — which only matters once the code, or a plugin it calls into, logs anything
+
 It is the same interpreter the app runs on, so a bad expression can disturb a live session — read before you write, and test on a throwaway note. Embedding a path by quoting it is the fragile part: base64 the value and decode it inside the code instead, which survives quotes, commas and non-ASCII alike
 
 ```bash

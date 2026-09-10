@@ -45,10 +45,11 @@ These cost one line each and are the difference between a real answer and a plau
 | What a note relates to without linking to it | `obsi.sh graph related "folder/note.md"` |
 | Broken links with the file each came from | `obsi.sh graph unresolved` — `unresolved verbose` joins its sources unparseably |
 | Anything the CLI has no command for | `eval code=…` against the app's own API |
+| Develop a plugin or theme: reload, errors, console, DOM, screenshot | `plugin:reload id=…`, `dev:errors`, `dev:console` after `dev:debug on` — the loop and its traps in [`references/plugin-dev.md`](references/plugin-dev.md) |
 
 Values with spaces need quoting; `\n` and `\t` work inside `content=`. To target another vault, `vault=<name>` must come **before** the command word — a bare vault name as the first argument is not accepted
 
-[`obsi.sh`](obsi.sh) sits beside this file and wraps the CLI rather than replacing it: what it does not recognise passes through with rules 1 and 4 applied, `find` says which field of a note matched — something `search`, which matches them all, cannot — and `graph` answers about the whole link graph without printing it. Flags, limits and why — [`references/obsi.md`](references/obsi.md)
+[`obsi.sh`](obsi.sh) sits beside this file and wraps the CLI rather than replacing it: what it does not recognise passes through with rules 1 and 4 applied, `find` says which field of a note matched — something `search`, which matches them all, cannot — and `graph` answers about the whole link graph without printing it. Flags, limits and why — [`references/obsi.md`](references/obsi.md). After an Obsidian update, run `obsi.sh selftest` before trusting `find --tag` or `graph related`: it checks the wrapper's copy of Obsidian's tag reading against the running app's own count
 
 ## Reading the graph
 
@@ -81,6 +82,7 @@ Prefer the CLI over editing files directly: it goes through the app, so the inde
 - [`references/commands.md`](references/commands.md) — output shape, counting semantics and one worked example per command group, all measured on a live vault. What `help` does not tell you
 - [`references/pitfalls.md`](references/pitfalls.md) — every trap above with its reproduction, plus setup problems and the places the official documentation and the local build disagree
 - [`references/obsi.md`](references/obsi.md) — the wrapper in full: every `find` and `graph` flag, how results are scored, and what each query cannot see
+- [`references/plugin-dev.md`](references/plugin-dev.md) — the reload, errors, console and inspect loop for a plugin or theme, with what `help` leaves out
 
 This skill covers the CLI only. How a particular vault's notes are written and organised — style, indexes, icons, diagrams, its own tooling — is set somewhere else, if it is set at all: most often by skills the vault carries itself, one per concern. Do not assume those rules exist, and do not invent them where they do not
 

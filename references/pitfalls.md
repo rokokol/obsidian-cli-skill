@@ -185,14 +185,20 @@ No output format rescues it, because the join happens before any formatter runs.
 Ask the index instead. This is the alias map both directions of the problem need, and it is exact:
 
 ```bash
-obsidian-cli eval code='(()=>{const m={};for(const f of app.vault.getMarkdownFiles()){const a=app.metadataCache.getFileCache(f)?.frontmatter?.aliases;if(!a)continue;for(const x of [].concat(a)){if(x)(m[String(x)]=m[String(x)]||[]).push(f.path)}}return JSON.stringify(m)})()'
+obsidian-cli eval code='(()=>{const m={};for(const f of app.vault.getMarkdownFiles()){const a=app.metadataCache.getFileCache(f)?.frontmatter?.aliases;if(!a)continue;for(const x of [].concat(a)){if(typeof x==="string"&&x.trim())(m[x.trim()]=m[x.trim()]||[]).push(f.path)}}return JSON.stringify(m)})()'
 ```
 
 ```console
-=> {"34984":["05. Courses/Sea/Tide tables.md"],"MOC currents":["05. Courses/Sea/f13. Currents — MOC.md"], …}
+=> {"Tide chart":["05. Courses/Sea/Tide tables.md"],"MOC currents":["05. Courses/Sea/f13. Currents — MOC.md"], …}
 ```
 
+Only string items count, the way Obsidian itself reads the field — see the next entry
+
 Every alias maps to an array of paths, so a collision is an entry with more than one, and membership answers whether an unresolved target is really broken. Append `Object.entries(m).filter(([,v])=>v.length>1)` for the collisions alone — it returned 60 where the text-splitting method returned 485
+
+### An alias written as a bare number is no alias
+
+YAML reads `- 34984` as a number, and Obsidian keeps only the string items of `aliases` — so that alias is not one, in the app or anywhere else. Measured on a live vault with exactly that entry: the index holds `34984` as a number, and the app's own `aliases` command lists no numeric alias at all. A link `[[34984]]` then resolves to nothing. Quote it — `- "34984"` — and quote any alias YAML would otherwise read as something other than text
 
 ## Flags and commands that do nothing
 
