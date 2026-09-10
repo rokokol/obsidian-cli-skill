@@ -187,27 +187,27 @@ checks=$((checks + 1))
 
 # Two sources: the index answers with score, reasons, path and detail; `search` answers with
 # bare paths. A note in both must outrank one in either
-export STUB_META="9	alias	Networks/Address types.md	unicast
-6	name	Networks/Unicast primer.md	Unicast primer"
-export STUB_SEARCH="Networks/Address types.md
+export STUB_META="9	alias	Sea/Coastlines.md	coastline
+6	name	Sea/Coastline primer.md	Coastline primer"
+export STUB_SEARCH="Sea/Coastlines.md
 Notes/Mentions it once.md"
 
-run find unicast
+run find coastline
 want_status 0 "find merging two sources"
 first=$(printf '%s\n' "$out" | sed -n 1p)
-[[ "$first" == "10	alias+text	Networks/Address types.md	unicast" ]] ||
+[[ "$first" == "10	alias+text	Sea/Coastlines.md	coastline" ]] ||
   fail "find did not merge the two sources into one ranked row: got '$first'"
 want_out "1	text	Notes/Mentions it once.md" "find merging two sources"
 checks=$((checks + 1))
 
 # What was cut has to be said out loud, and saying it must not cost the exit status: `head`
 # would take SIGPIPE here and kill the script under pipefail before the notice printed
-run find unicast --limit 1
+run find coastline --limit 1
 want_status 0 "find bounded by --limit"
 want_out "2 more matches" "find bounded by --limit"
 checks=$((checks + 1))
 
-run find unicast --limit 99
+run find coastline --limit 99
 want_status 0 "find within its limit"
 want_not_out "more matches" "find within its limit"
 checks=$((checks + 1))
@@ -281,6 +281,42 @@ want_status 0 "vault= before a wrapper command"
 grep -q '^vault=Other	eval	' "$STUB_LOG" ||
   fail "vault= before find did not reach the query as a vault selector: $(cat "$STUB_LOG")"
 checks=$((checks + 1))
+
+# --value narrows find to property values the way --name and the rest narrow to theirs: it is
+# a marker, handed to the index query beside the others. The matching itself is JavaScript
+# the stub cannot run, so what is checked here is what reaches that query
+b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
+export STUB_CODE_LOG="$work/meta-code.js"
+export STUB_META="4	prop	Kept/One.md	status=draft"
+export STUB_SEARCH="No matches found."
+run find draft --value
+want_status 0 "find --value"
+grep -qF "decode('$(b64 prop)')" "$STUB_CODE_LOG" ||
+  fail "find --value did not reach the index query as its one marker"
+checks=$((checks + 1))
+
+run find draft --name --value
+want_status 0 "find --name --value"
+grep -qF "decode('$(b64 'name prop')')" "$STUB_CODE_LOG" ||
+  fail "find --name --value did not reach the index query as both markers"
+checks=$((checks + 1))
+
+# With --prop NAME, --value looks at that property's values alone: `find draft --value
+# --prop status` asks for draft in status, not in every property of the notes that have one
+export STUB_ALLOWED="Kept/One.md"
+run find draft --value --prop status=draft
+want_status 0 "find --value --prop"
+grep -qF "const scope = decode('$(b64 status)')" "$STUB_CODE_LOG" ||
+  fail "find --value --prop status did not confine the value match to status"
+checks=$((checks + 1))
+
+# Without --value the filter confines nothing: a plain find still matches every property
+run find draft --prop status
+want_status 0 "find --prop without --value"
+grep -qF "const scope = decode('')" "$STUB_CODE_LOG" ||
+  fail "find --prop without --value confined the value match to the filtered property"
+checks=$((checks + 1))
+unset STUB_ALLOWED STUB_CODE_LOG
 
 # ---- arguments the wrapper rejects --------------------------------------------------------
 
@@ -489,6 +525,13 @@ expect_red "$(plant stderr-in-answer '/printf .%s\\n. "\$err" >&2/s/.*/  [[ -z "
 
 expect_red "$(plant empty-answer-passes '/the app answered nothing/s/.*/  :/')" \
   "an empty reply from the app printed as a blank answer" "answered with nothing"
+
+expect_red "$(plant value-not-a-marker '/^        --value)$/,/;;$/s/markers=.*/:/')" \
+  "--value accepted and dropped instead of narrowing to property values" "its one marker"
+
+# shellcheck disable=SC2016
+expect_red "$(plant scope-always 's/^    scope=""$/    scope="${prop%%=*}"/')" \
+  "--prop confining the value match even without --value" "confined the value match to the filtered property"
 
 expect_red "$(plant out-stays-exported '/^export -n out err$/d')" \
   "an exported \$out from the caller left on the wrapper's own locals" "find under an exported"

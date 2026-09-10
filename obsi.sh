@@ -3,7 +3,7 @@
 # link graph, and passes everything else through untouched, so `obsi.sh read path=x.md` is
 # `obsidian-cli read path=x.md` with the traps handled.
 #
-#   obsi.sh [--vault NAME] find QUERY [--name|--alias|--tag|--heading|--body]...
+#   obsi.sh [--vault NAME] find QUERY [--name|--alias|--tag|--heading|--body|--value]...
 #                                    [--prop NAME[=VALUE]] [--limit N]
 #   obsi.sh [--vault NAME] graph [summary|hubs|ends|components|related|unresolved|path|dump] [ARGS…]
 #   obsi.sh [--vault NAME] <any CLI command and parameters...>
@@ -136,6 +136,26 @@ const decode = s => new TextDecoder().decode(Uint8Array.from(atob(s), c => c.cha
 JS
 }
 
+# Obsidian's own reading of `tags` and `aliases`, copied from its bundle (1.13.4:
+# parseFrontMatterStringArray, parseFrontMatterAliases, parseFrontMatterTags), because the
+# eval scope cannot require the module that exports them. A string is ONE item and is never
+# split on commas — `aliases: x, y` is one alias named "x, y" — a list is taken item by item,
+# so "Smith, John" as a list item stays whole, items that are not strings are dropped, a
+# tag holding a space is no tag at all, and the key matches in any case
+fm_lists() {
+  cat <<'JS'
+const fmList = (fm, re) => {
+  let v = null
+  for (const k in fm || {}) if (Object.prototype.hasOwnProperty.call(fm, k) && re.test(k)) { v = fm[k]; break }
+  if (!v) return []
+  if (typeof v === 'string') return [v.trim()]
+  return Array.isArray(v) ? v.filter(x => typeof x === 'string').map(x => x.trim()) : []
+}
+const fmAliases = fm => fmList(fm, /^aliases$/i).filter(Boolean)
+const fmTags = fm => fmList(fm, /^tags$/i).filter(t => t && !t.includes(' ')).map(t => t.charAt(0) === '#' ? t : '#' + t)
+JS
+}
+
 # ---- finding a note ----------------------------------------------------------------------
 
 # allowed_by_prop NAME[=VALUE] -> every note whose frontmatter satisfies it, one per line
@@ -162,7 +182,7 @@ return out.join('\n')
 # at the file's text and the frontmatter is part of that text. So this is not an alternative
 # to `search` — it runs `search` and adds what `search` structurally cannot do:
 #
-#   * say WHERE the match was. `search query=unicast` returns 6 bare paths; two of those
+#   * say WHERE the match was. `search query=coastline` returns 6 bare paths; two of those
 #     notes answer to that name and four merely contain the word, and nothing in the output
 #     separates them
 #   * be restricted to one field. `--alias` returns those two and nothing else, which is a
@@ -172,12 +192,14 @@ return out.join('\n')
 # name outranks a tag, and a body match is worth one point. The ranking is a convenience;
 # the reason column is the point, because it makes a wrong hit visible rather than plausible
 find_notes() {
-  local query="$1" limit="$2" markers="$3" prop="$4" body meta
+  local query="$1" limit="$2" markers="$3" prop="$4" scope="$5" body meta
 
   meta=$(js "(() => {
 $(decoder)
+$(fm_lists)
 const q = decode('$(b64 "$query")').toLowerCase()
 const markers = decode('$(b64 "$markers")').split(' ')
+const scope = decode('$(b64 "$scope")')
 const on = m => markers.indexOf(m) >= 0
 const hits = {}
 // --prop is not applied here: the same predicate would then exist in two places and could
@@ -203,17 +225,18 @@ for (const f of app.vault.getMarkdownFiles()) {
     if (is(f.basename)) add(f.path, 10, 'name', f.basename)
     else if (has(f.basename)) add(f.path, 6, 'name', f.basename)
   }
-  if (on('alias')) for (const a of [].concat(fm.aliases || [])) {
-    if (!a) continue
-    if (is(a)) add(f.path, 9, 'alias', String(a))
-    else if (has(a)) add(f.path, 5, 'alias', String(a))
+  if (on('alias')) for (const a of fmAliases(fm)) {
+    if (is(a)) add(f.path, 9, 'alias', a)
+    else if (has(a)) add(f.path, 5, 'alias', a)
   }
   if (on('tag')) {
-    const tags = (c.tags || []).map(t => t.tag).concat([].concat(fm.tags || []).map(t => '#' + t))
+    const tags = (c.tags || []).map(t => t.tag).concat(fmTags(fm))
     for (const t of tags) if (t && has(t)) add(f.path, 4, 'tag', String(t))
   }
+  // With a scope — --value beside --prop NAME — only that property's values count; without
+  // one every property does, except the two the alias and tag markers already read
   if (on('prop')) for (const k in fm) {
-    if (k === 'aliases' || k === 'tags') continue
+    if (scope ? k !== scope : /^(aliases|tags)$/i.test(k)) continue
     for (const v of [].concat(fm[k])) if (v && has(v)) add(f.path, 4, 'prop', k + '=' + v)
   }
   if (on('heading')) for (const h of c.headings || []) if (has(h.heading)) add(f.path, 3, 'heading', h.heading)
@@ -443,6 +466,7 @@ return path.reverse().join('\n')
 graph_related() {
   js "(() => {
 $(graph_prelude)
+$(fm_lists)
 const target = decode('$(b64 "$1")')
 if (!(target in indeg)) return 'Error: ' + target + ' is not a note in the graph'
 const linked = new Set(fwd[target].concat(rev[target]))
@@ -460,7 +484,7 @@ const tagsOf = f => {
   const c = app.metadataCache.getFileCache(f) || {}
   const fm = c.frontmatter || {}
   return (c.tags || []).map(t => String(t.tag).replace(/^#/, ''))
-    .concat([].concat(fm.tags || []).filter(Boolean).map(String))
+    .concat(fmTags(fm).map(t => t.slice(1)))
 }
 const file = app.vault.getAbstractFileByPath(target)
 const mine = new Set(file ? tagsOf(file) : [])
@@ -642,10 +666,17 @@ case "$1" in
     limit=20
     prop=""
     markers=""
+    value_flag=""
     while (($#)); do
       case "$1" in
         --name | --alias | --tag | --heading | --body)
           markers="$markers ${1#--}"
+          shift
+          ;;
+        --value)
+          # Property values: the `prop` marker, which is otherwise only on by default
+          markers="$markers prop"
+          value_flag=1
           shift
           ;;
         --prop)
@@ -663,10 +694,14 @@ case "$1" in
     done
     need_count "$limit"
     # Naming no marker means all of them, which is what someone who just wants the note
-    # expects. Naming one narrows to it, and the `prop` marker is only ever on by default:
-    # asked for explicitly it is a filter, not a thing to match the query against
+    # expects. Naming one narrows to it. `--prop` is a filter, not a marker; the marker for
+    # property values is `--value`
     [[ -n "$markers" ]] || markers=" name alias tag prop heading body"
-    find_notes "$query" "$limit" "${markers# }" "$prop"
+    # With --value, --prop NAME also says where to look: the value match is confined to that
+    # property. Without --value the filter narrows the notes and nothing else
+    scope=""
+    [[ -z "$value_flag" || -z "$prop" ]] || scope="${prop%%=*}"
+    find_notes "$query" "$limit" "${markers# }" "$prop" "$scope"
     ;;
   graph)
     shift

@@ -19,6 +19,7 @@
 #   STUB_JS_ERROR make every eval return `=> Error: …`, which the CLI calls success
 #   STUB_EVAL     what any other eval returns, before `=> ` (default: ok)
 #   STUB_STDERR   a line every eval also writes to stderr, the way a runtime warning would
+#   STUB_CODE_LOG file to save the code of find's metadata query in, for what reached it
 set -uo pipefail
 
 # The real client reads stdin. Draining it here is what makes the loop test meaningful:
@@ -68,6 +69,7 @@ case "$command_word" in
     fi
     case "$code" in
       *"const markers"*)
+        [ -z "${STUB_CODE_LOG:-}" ] || printf '%s\n' "$code" >"$STUB_CODE_LOG"
         if [ -n "${STUB_META_FILE:-}" ]; then
           # A payload big enough to test bounding does not fit in the environment: it is
           # counted against ARG_MAX and inherited by every child, so it goes in a file
