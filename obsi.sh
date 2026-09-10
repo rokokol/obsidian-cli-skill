@@ -15,6 +15,12 @@
 # Needs: bash 3.2, a running Obsidian 1.12+, and standard POSIX tools
 set -euo pipefail
 
+# A nix dev shell exports $out, the build's output path, and bash keeps that export on a
+# local of the same name: an answer held in `out` then went into the environment of every
+# command run after it, and past 128 KB exec refused with "Argument list too long". The
+# script's own names are its own, so whatever the caller exported under them is not
+export -n out err
+
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 
@@ -81,15 +87,20 @@ prefix=()
 
 # cli ARGS... -> the command's stdout, with an application error turned into exit 1
 cli() {
-  local out status
+  local out status err
   set +e
-  out=$("$bin" ${prefix[@]+"${prefix[@]}"} "$@" </dev/null 2>&1)
+  out=$("$bin" ${prefix[@]+"${prefix[@]}"} "$@" </dev/null 2>"$scratch/stderr")
   status=$?
   set -e
+  err=$(cat "$scratch/stderr")
   case "$out" in
     "Error: "*) die "${out#Error: }" ;;
   esac
-  ((status == 0)) || die "$out"
+  ((status == 0)) || die "$(printf '%s\n%s\n' "$out" "$err" | sed '/^$/d')"
+  # The client's stderr is its diagnostics, never part of its answer. Captured together with
+  # stdout, a runtime warning would land inside whatever the caller parses — a dumped graph
+  # included — so it is passed on to stderr instead
+  [[ -z "$err" ]] || printf '%s\n' "$err" >&2
   printf '%s\n' "$out"
 }
 
@@ -363,7 +374,8 @@ const nowhere = notes.filter(n => outdeg[n] === 0).sort()
 const show = (label, list) =>
   list.slice(0, $1).map(p => label + '\t' + p).join('\n') +
   (list.length > $1 ? '\n' + label + '\t… and ' + (list.length - $1) + ' more' : '')
-return [show('no-incoming', nothing), show('no-outgoing', nowhere)].filter(Boolean).join('\n')
+const out = [show('no-incoming', nothing), show('no-outgoing', nowhere)].filter(Boolean).join('\n')
+return out || (notes.length ? 'Every note has a link in and a link out.' : 'No notes found.')
 })()"
 }
 
@@ -497,40 +509,59 @@ return lines.join('\n')
 # The only way to get the whole graph, and it goes to a file. What lands there is exactly
 # `resolvedLinks`: an object of source path to an object of target path to link count
 graph_dump() {
-  local target="$1" out
-  : >"$target" || die "cannot write to $target"
+  local target="$1" dir tmp out
+  dir=$(dirname -- "$target")
+  # Asked before the query rather than by emptying the file: truncating it first meant a
+  # query that failed — an app that was down — left an existing graph.json empty
+  [[ -d "$dir" && -w "$dir" && (! -e "$target" || -w "$target") ]] ||
+    die "cannot write to $target"
   out=$(js '(() => JSON.stringify(app.metadataCache.resolvedLinks))()')
-  printf '%s\n' "$out" >"$target"
+  # Written beside the target and moved over it, so the file holds the old graph or the whole
+  # new one, never an empty or a half-written one
+  tmp=$(mktemp "$dir/.obsi-dump.XXXXXX") || die "cannot write to $target"
+  if ! { printf '%s\n' "$out" >"$tmp" && mv -f -- "$tmp" "$target"; }; then
+    rm -f -- "$tmp"
+    die "cannot write to $target"
+  fi
   printf 'wrote %s bytes to %s\n' "$(wc -c <"$target" | tr -d ' ')" "$target"
+}
+
+# answer QUERY ARGS... -> the query's reply, or exit. Every graph query answers with rows or
+# with a sentence; an empty reply printed as a blank line at exit 0 would read like an answer
+answer() {
+  local out
+  out=$("$@")
+  [[ -n "$out" ]] || die "the app answered nothing to $1 — every graph query answers with rows or a sentence"
+  printf '%s\n' "$out"
 }
 
 graph() {
   local what="${1:-summary}"
   [[ $# -eq 0 ]] || shift
   case "$what" in
-    summary) graph_summary ;;
+    summary) answer graph_summary ;;
     hubs)
       need_count "${1:-10}"
-      graph_hubs "${1:-10}"
+      answer graph_hubs "${1:-10}"
       ;;
     ends)
       need_count "${1:-10}"
-      graph_ends "${1:-10}"
+      answer graph_ends "${1:-10}"
       ;;
     components)
       need_count "${1:-10}" "${2:-5}"
-      graph_components "${1:-10}" "${2:-5}"
+      answer graph_components "${1:-10}" "${2:-5}"
       ;;
     unresolved)
       need_count "${1:-40}"
-      graph_unresolved "${1:-40}"
+      answer graph_unresolved "${1:-40}"
       ;;
     related)
       [[ $# -ge 1 ]] || die "graph related needs a note path, exactly as the vault spells it"
       related_note="$1"
       shift
       related_rows=10
-      related_tags=-1
+      related_tags=""
       while (($#)); do
         case "$1" in
           --tag-max-notes)
@@ -549,13 +580,20 @@ graph() {
         esac
       done
       need_count "$related_rows"
-      [[ "$related_tags" =~ ^(-1|[0-9]+)$ ]] ||
-        die "--tag-max-notes takes zero or more, not '$related_tags'"
-      graph_related "$related_note" "$related_rows" "$related_tags"
+      # Spliced into the JavaScript as a literal, so a leading zero is refused with the rest:
+      # `010` there is octal in the app's sloppy-mode scope and means 8. -1 is this script's
+      # own sentinel for the default and is set below, never taken from a caller
+      if [[ -n "$related_tags" ]]; then
+        [[ "$related_tags" =~ ^(0|[1-9][0-9]*)$ ]] ||
+          die "--tag-max-notes takes zero or a positive number, not '$related_tags'"
+      else
+        related_tags=-1
+      fi
+      answer graph_related "$related_note" "$related_rows" "$related_tags"
       ;;
     path)
       [[ $# -eq 2 ]] || die "graph path needs two note paths, exactly as the vault spells them"
-      graph_path "$1" "$2"
+      answer graph_path "$1" "$2"
       ;;
     dump)
       [[ $# -le 1 ]] || die "graph dump takes one file, or none for graph.json"

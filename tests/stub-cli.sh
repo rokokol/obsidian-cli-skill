@@ -16,7 +16,9 @@
 #   STUB_ALLOWED  what an `eval` carrying the --prop allowlist query returns
 #   STUB_SEARCH   what `search` returns
 #   STUB_ERROR    a command name that must answer `Error: …` at exit 0
-#   STUB_JS_ERROR make the metadata eval return `=> Error: …`, which the CLI calls success
+#   STUB_JS_ERROR make every eval return `=> Error: …`, which the CLI calls success
+#   STUB_EVAL     what any other eval returns, before `=> ` (default: ok)
+#   STUB_STDERR   a line every eval also writes to stderr, the way a runtime warning would
 set -uo pipefail
 
 # The real client reads stdin. Draining it here is what makes the loop test meaningful:
@@ -59,11 +61,14 @@ case "$command_word" in
     ;;
   eval)
     code="${2#code=}"
+    [ -z "${STUB_STDERR:-}" ] || printf '%s\n' "$STUB_STDERR" >&2
+    if [ -n "${STUB_JS_ERROR:-}" ]; then
+      echo "=> Error: nope.md is not a note in the graph"
+      exit 0
+    fi
     case "$code" in
       *"const markers"*)
-        if [ -n "${STUB_JS_ERROR:-}" ]; then
-          echo "=> Error: nope.md is not a note in the graph"
-        elif [ -n "${STUB_META_FILE:-}" ]; then
+        if [ -n "${STUB_META_FILE:-}" ]; then
           # A payload big enough to test bounding does not fit in the environment: it is
           # counted against ARG_MAX and inherited by every child, so it goes in a file
           printf '=> '
@@ -73,8 +78,9 @@ case "$command_word" in
         fi
         ;;
       *"const filter"*) printf '=> %s\n' "${STUB_ALLOWED:-}" ;;
-      *resolvedLinks*) echo '=> {"a.md":{"b.md":1}}' ;;
-      *) echo "=> ok" ;;
+      # the dump alone: every graph query reads resolvedLinks too, and must reach STUB_EVAL
+      *"JSON.stringify(app.metadataCache.resolvedLinks)"*) echo '=> {"a.md":{"b.md":1}}' ;;
+      *) printf '=> %s\n' "${STUB_EVAL-ok}" ;;
     esac
     ;;
   search)

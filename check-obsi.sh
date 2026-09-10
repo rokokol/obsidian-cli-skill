@@ -47,6 +47,11 @@ checks=0
 
 # run -> the wrapper's stdout and stderr in $out, its own status in $status. No pipe stands
 # between the command and its verdict, because the status would then belong to the pipe
+#
+# A nix dev shell — where CI runs this — exports $out, which would export every captured
+# output to every child and decide one check's result from the calling shell. It is taken
+# off here, and the one check about an exported $out sets it itself
+export -n out
 out=""
 status=0
 run() {
@@ -221,6 +226,16 @@ run find common --limit 2
 want_status 0 "find bounded over a payload larger than a pipe buffer"
 want_out "3998 more matches" "find bounded over a payload larger than a pipe buffer"
 checks=$((checks + 1))
+
+# A nix dev shell exports $out, and bash keeps that export on a local of the same name. The
+# 400 KB answer above, held in one, went into the environment of the next command the
+# wrapper ran, exec refused it as "Argument list too long", and find said No matches found
+out_env=$(env out=/nix/store/an-output-path "$OBSI_UNDER_TEST" find common --limit 2 2>&1) || true
+case "$out_env" in
+  *"3998 more matches"*) ;;
+  *) fail "find under an exported \$out: $out_env" ;;
+esac
+checks=$((checks + 1))
 unset STUB_META_FILE
 
 # An empty result is a sentence, the way every listing in the CLI answers one. Empty output
@@ -356,6 +371,49 @@ grep -q '"a.md"' "$work/graph.json" ||
   fail "graph dump wrote no graph to its file: $(cat "$work/graph.json")"
 checks=$((checks + 1))
 
+# A failed dump must leave the file as it was. The file used to be truncated before the
+# query ran, so an app that was down turned an existing graph.json into an empty one
+printf 'precious\n' >"$work/kept.json"
+STUB_JS_ERROR=1 run graph dump "$work/kept.json"
+want_status 1 "graph dump when the query fails"
+[[ "$(cat "$work/kept.json")" == precious ]] ||
+  fail "graph dump when the query fails: the existing file was clobbered — it now holds '$(cat "$work/kept.json")'"
+checks=$((checks + 1))
+
+# What the client prints on stderr is not part of its answer. Captured together with stdout,
+# a warning from the app's runtime would land inside the JSON and make the dump unparseable
+STUB_STDERR="Gtk-WARNING: noise from the app's runtime" run graph dump "$work/clean.json"
+want_status 0 "graph dump with the client writing to stderr"
+if grep -q 'Gtk-WARNING' "$work/clean.json"; then
+  fail "graph dump with the client writing to stderr: the warning landed inside the JSON"
+fi
+checks=$((checks + 1))
+
+# A graph query answers with rows or a sentence. An empty reply from the app — `graph ends`
+# on a vault where no note qualified was one — printed a blank line at exit 0, which reads
+# like an answer
+STUB_EVAL="" run graph ends
+want_status 1 "a graph query the app answered with nothing"
+want_out "answered nothing" "a graph query the app answered with nothing"
+checks=$((checks + 1))
+
+# --tag-max-notes is spliced into the JavaScript as a literal too. `010` there is octal in
+# the app's sloppy-mode scope and means 8, and `-1` is the wrapper's own sentinel for "the
+# default", so a caller who typed it got the default without a word
+for value in 010 -1; do
+  : >"$STUB_LOG"
+  run graph related a.md --tag-max-notes "$value"
+  want_status 1 "--tag-max-notes $value"
+  want_out "zero or a positive number" "--tag-max-notes $value"
+  if grep -q 'code=' "$STUB_LOG"; then
+    fail "--tag-max-notes $value: JavaScript reached the app before the value was refused"
+  fi
+  checks=$((checks + 1))
+done
+run graph related a.md --tag-max-notes 0
+want_status 0 "--tag-max-notes 0, which turns the tag signal off"
+checks=$((checks + 1))
+
 # ---- every check above is able to fail -----------------------------------------------------
 # A copy of obsi.sh with one defect planted must send this same file red. Each defect is one
 # that was actually hit while writing the wrapper, so the suite is pinned to real failures
@@ -407,12 +465,36 @@ expect_red() { # expect_red COPY WHAT FRAGMENT
 nested_ok=$(CHECK_OBSI_NESTED=1 OBSI_UNDER_TEST="$obsi" "$self" "$root" 2>&1) ||
   fail "the unmodified wrapper failed its own checks: $nested_ok"
 
-expect_red "$(plant no-stdin-guard 's| </dev/null 2>&1|  2>\&1|')" \
+# shellcheck disable=SC2016
+expect_red "$(plant no-stdin-guard 's|"\$@" </dev/null 2>"\$scratch/stderr"|"$@" 2>"$scratch/stderr"|')" \
   "stdin left open on every call" "stdin was eaten"
 
+# One plant per function: the same `case` stands in cli() and in js(), and a plant that
+# neutered both at once never showed that either check works alone
 # shellcheck disable=SC2016
-expect_red "$(plant no-error-check '/^  case "\$out" in$/,/^  esac$/s|"Error: "\*) die.*|"Error: "*) : ;;|')" \
-  "the Error: prefix no longer turned into a failure" "an application error at exit 0"
+expect_red "$(plant no-error-check-cli '/^cli() {$/,/^}$/s|"Error: "\*) die.*|"Error: "*) : ;;|')" \
+  "the CLI's Error: prefix no longer turned into a failure" "an application error at exit 0"
+
+# shellcheck disable=SC2016
+expect_red "$(plant no-error-check-js '/^js() {$/,/^}$/s|"Error: "\*) die.*|"Error: "*) : ;;|')" \
+  "an Error: raised inside eval no longer turned into a failure" "an error raised inside eval"
+
+# shellcheck disable=SC2016
+expect_red "$(plant dump-truncates-first 's/^graph_dump() {$/graph_dump() { : >"$1";/')" \
+  "graph dump emptying its file before the query has answered" "the existing file was clobbered"
+
+# shellcheck disable=SC2016
+expect_red "$(plant stderr-in-answer '/printf .%s\\n. "\$err" >&2/s/.*/  [[ -z "$err" ]] || out="$err$out"/')" \
+  "the client's stderr folded into its answer" "landed inside the JSON"
+
+expect_red "$(plant empty-answer-passes '/the app answered nothing/s/.*/  :/')" \
+  "an empty reply from the app printed as a blank answer" "answered with nothing"
+
+expect_red "$(plant out-stays-exported '/^export -n out err$/d')" \
+  "an exported \$out from the caller left on the wrapper's own locals" "find under an exported"
+
+expect_red "$(plant tag-max-octal '/related_tags" =~/s/=~ .* ]]/=~ ^(-1|[0-9]+)$ ]]/')" \
+  "--tag-max-notes taking a leading zero and the default's sentinel" "--tag-max-notes 010"
 
 # shellcheck disable=SC2016
 expect_red "$(plant head-not-awk 's|awk -v n="\$limit" .NR <= n.|head -n "$limit"|')" \
