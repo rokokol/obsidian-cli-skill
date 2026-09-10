@@ -6,6 +6,7 @@
 #   obsi.sh [--vault NAME] find QUERY [--name|--alias|--tag|--heading|--body|--value]...
 #                                    [--prop NAME[=VALUE]] [--limit N]
 #   obsi.sh [--vault NAME] graph [summary|hubs|ends|components|related|unresolved|path|dump] [ARGS…]
+#   obsi.sh [--vault NAME] selftest
 #   obsi.sh [--vault NAME] <any CLI command and parameters...>
 #
 # The CLI fails quietly in several ways, and each is absorbed here rather than left to every
@@ -627,6 +628,60 @@ graph() {
   esac
 }
 
+# ---- checking the copy against Obsidian ----------------------------------------------------
+
+# fm_lists is a copy, and a copy drifts when Obsidian changes. The one answer from Obsidian's
+# own reading that reaches eval is metadataCache.getTags(): the vault's tag counts as the tag
+# pane shows them. selftest sums the same counts from what find and graph related read — the
+# frontmatter through fm_lists, plus the inline tags — and names every tag whose count
+# differs. Run after an Obsidian update: a difference means this copy, or getTags' own
+# counting rules below, no longer match the Obsidian that is running
+selftest_js() {
+  cat <<'JS'
+// getTags' counting rules, copied from Obsidian 1.13.4 (MetadataCache.getTags and the tag
+// check it calls): excluded files are skipped, every occurrence counts, a nested tag counts
+// toward each parent, a tag the check refuses counts for nothing, and spellings that differ
+// only in case are one tag. The spelling Obsidian keeps for a merged tag depends on its own
+// file order, so tags are compared case-folded rather than by spelling. The class below
+// opens with two ranges written as characters, U+2000–U+206F and U+2E00–U+2E7F — general
+// and supplemental punctuation — exactly as Obsidian's own source spells them with \u
+const valid = new RegExp(/^#[^ -⁯⸀-⹿'!"#$%&()*+,.:;<=>?@^`{|}~\[\]\\\s]+/.source + '$')
+const numeric = /^#\d+$/
+const ours = {}
+const count = t => {
+  if (t.endsWith('/')) t = t.slice(0, -1)
+  if (!valid.test(t) || numeric.test(t)) return
+  const k = t.toLowerCase()
+  ours[k] = (ours[k] || 0) + 1
+  const last = t.split('/').pop()
+  if (last !== t) count(t.slice(0, t.length - last.length - 1))
+}
+for (const f of app.vault.getMarkdownFiles()) {
+  if (app.metadataCache.isUserIgnored(f.path)) continue
+  const c = app.metadataCache.getFileCache(f)
+  if (c) for (const t of fmTags(c.frontmatter).concat((c.tags || []).map(x => x.tag))) count(t)
+}
+const theirs = {}
+const obsidian = app.metadataCache.getTags()
+for (const t in obsidian) theirs[t.toLowerCase()] = (theirs[t.toLowerCase()] || 0) + obsidian[t]
+const rows = []
+for (const t of new Set(Object.keys(ours).concat(Object.keys(theirs))))
+  if ((ours[t] || 0) !== (theirs[t] || 0)) rows.push(t + '\tours ' + (ours[t] || 0) + '\tobsidian ' + (theirs[t] || 0))
+if (rows.length)
+  return 'Error: ' + rows.length + (rows.length > 1 ? ' tag counts differ' : ' tag count differs') +
+    " from Obsidian's own — fm_lists no longer reads tags the way this Obsidian does, or getTags counts them differently now:\n" +
+    rows.sort().join('\n')
+return "tags agree with Obsidian's own count (" + Object.keys(theirs).length + ' tags)'
+JS
+}
+
+self_test() {
+  js "(() => {
+$(fm_lists)
+$(selftest_js)
+})()"
+}
+
 # ---- arguments ---------------------------------------------------------------------------
 
 while (($#)); do
@@ -706,6 +761,10 @@ case "$1" in
   graph)
     shift
     graph "$@"
+    ;;
+  selftest)
+    (($# == 1)) || die "selftest takes no arguments"
+    answer self_test
     ;;
   *)
     # `vault=` and `--vault` both belong before the command word. After it the CLI drops

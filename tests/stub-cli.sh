@@ -20,6 +20,7 @@
 #   STUB_EVAL     what any other eval returns, before `=> ` (default: ok)
 #   STUB_STDERR   a line every eval also writes to stderr, the way a runtime warning would
 #   STUB_CODE_LOG file to save the code of find's metadata query in, for what reached it
+#   STUB_EVAL_LOG file to save the code of every eval in, the last one winning
 set -uo pipefail
 
 # The real client reads stdin. Draining it here is what makes the loop test meaningful:
@@ -63,6 +64,7 @@ case "$command_word" in
   eval)
     code="${2#code=}"
     [ -z "${STUB_STDERR:-}" ] || printf '%s\n' "$STUB_STDERR" >&2
+    [ -z "${STUB_EVAL_LOG:-}" ] || printf '%s\n' "$code" >"$STUB_EVAL_LOG"
     if [ -n "${STUB_JS_ERROR:-}" ]; then
       echo "=> Error: nope.md is not a note in the graph"
       exit 0

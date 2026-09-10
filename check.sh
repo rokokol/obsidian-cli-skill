@@ -8,7 +8,7 @@
 # so a reader with an app open can falsify them — see references/pitfalls.md.
 #
 # Nothing here touches the network, so it is safe on pull requests.
-# Needs: actionlint, shellcheck, shfmt — from the flake's dev shell, never from PATH's luck.
+# Needs: actionlint, shellcheck, shfmt, node — from the flake's dev shell, never from PATH's luck.
 #
 #   nix develop -c ./check.sh
 set -euo pipefail
@@ -30,7 +30,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 missing=()
-for tool in actionlint shellcheck shfmt; do
+for tool in actionlint shellcheck shfmt node; do
   command -v "$tool" >/dev/null || missing+=("$tool")
 done
 ((${#missing[@]} == 0)) ||
@@ -54,9 +54,9 @@ echo "== SKILL.md loads, every reference is reachable, and every link and anchor
 ./check-skill.sh -n "$skill_name" .
 
 echo "== the wrapper's shell half behaves, against a fake CLI"
-# The graph and find queries are JavaScript run inside the app and no stub can execute them,
-# so what this covers is everything the shell owns — and it plants a defect per check on
-# every run, each one a bug that was actually hit while the wrapper was written
+# The shell half against the stub, and the JavaScript the wrapper builds for find, graph
+# related and selftest run in node against a made-up vault — each with a defect planted per
+# check on every run. What stays measured rather than tested is the real app's index
 ./check-obsi.sh .
 
 echo "== the changelog obeys the versioning skill's rules"

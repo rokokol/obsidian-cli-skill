@@ -6,12 +6,14 @@
 #
 #   check-obsi.sh [DIR]
 #
-# What it can and cannot answer. The graph and find queries are JavaScript executed inside
-# the app, and no stub can run them, so their logic is NOT covered here — it carries its
-# measurements in references/obsi.md instead. What is covered is everything the shell owns:
+# What it can and cannot answer. Everything the shell owns is covered against the stub:
 # reaching the client, turning a dishonest exit status into an honest one, closing stdin,
 # passing arguments through unchanged, merging and ranking two result sets, and bounding
-# output without losing the notice that says it was bounded.
+# output without losing the notice that says it was bounded. The graph and find queries
+# are JavaScript executed inside the app; the stub captures that code as the wrapper builds
+# it and node runs it against tests/fake-app.js, so its logic is covered for the questions
+# that fake vault asks. How it behaves against a real vault's index is still measured, not
+# tested — see references/obsi.md. Needs node, from the flake's dev shell.
 #
 # Exit 1 with `check-obsi: <what>` on the first finding, 2 on a usage error.
 set -uo pipefail
@@ -450,6 +452,94 @@ run graph related a.md --tag-max-notes 0
 want_status 0 "--tag-max-notes 0, which turns the tag signal off"
 checks=$((checks + 1))
 
+# selftest is the wrapper's own command, not the CLI's: it must reach the app as a query and
+# turn a reported difference into a failure, not pass through as an unknown CLI command
+STUB_EVAL="tags agree with Obsidian's own count (3 tags)" run selftest
+want_status 0 "selftest when the counts agree"
+want_out "tags agree with Obsidian's own count" "selftest when the counts agree"
+checks=$((checks + 1))
+
+STUB_EVAL="Error: 1 tag count differs from Obsidian's own" run selftest
+want_status 1 "selftest when a count differs"
+want_out "differs from Obsidian's own" "selftest when a count differs"
+checks=$((checks + 1))
+
+# ---- the JavaScript half, in node against a fake app --------------------------------------
+# The stub saves the code the wrapper hands to eval, exactly as built; node runs it against
+# the made-up vault in tests/fake-app.js. Taking the code from the wrapper rather than from
+# a copy is what keeps this from drifting: a planted copy of obsi.sh is tested through the
+# very same path
+
+command -v node >/dev/null ||
+  fail "node is missing — it is pinned in the flake's dev shell, so run this under nix develop"
+fake_app="$root/tests/fake-app.js"
+mkdir -p "$work/js"
+export STUB_META="" STUB_SEARCH="No matches found."
+
+answer_of() { # answer_of NAME ARGS... -> $out holds what the app would answer to find's query
+  local name="$1"
+  shift
+  STUB_CODE_LOG="$work/js/$name.js" run "$@"
+  out=$(node "$fake_app" "$work/js/$name.js" 2>&1) || fail "$name: node could not run the query: $out"
+}
+
+answer_of value find draft --value
+want_out "4	prop	Sea/Other.md	note=draft" "find --value in node"
+want_out "4	prop	Sea/Coastlines.md	status=draft" "find --value in node"
+want_not_out "	name	" "find --value in node"
+checks=$((checks + 1))
+
+answer_of scoped find draft --value --prop status
+want_out "4	prop	Sea/Coastlines.md	status=draft" "find --value --prop status in node"
+want_not_out "note=draft" "find --value --prop status in node"
+checks=$((checks + 1))
+
+# Obsidian reads a string as ONE item and never splits it on commas: the alias is
+# "coastline, shore", so "shore" is a partial match on it rather than an alias of its own
+answer_of alias-string find shore --alias
+want_out "5	alias	Sea/Coastlines.md	coastline, shore" "a comma string alias in node"
+checks=$((checks + 1))
+
+# A list item is taken whole, comma and all
+answer_of alias-list find "smith, john" --alias
+want_out "9	alias	Sea/Smith.md	Smith, John" "a list alias holding a comma in node"
+checks=$((checks + 1))
+
+# `tags: a, b` is one string holding a space, and Obsidian gives such a note no tags at all
+answer_of tags-string find a --tag
+want_not_out "Sea/Smith.md" "tags: a, b in node"
+checks=$((checks + 1))
+
+# Obsidian matches the key in any case, so `Tags:` and `Aliases:` count
+answer_of mixed-tags find y --tag
+want_out "4	tag	Sea/Tagged.md	#y" "a mixed-case key in node"
+answer_of mixed-aliases find upper --alias
+want_out "Sea/Tagged.md" "a mixed-case key in node"
+checks=$((checks + 1))
+
+# graph related compares tags without their `#`, from either place: Tagged carries x in its
+# frontmatter as "#x", Lone carries it inline, and nothing links the two
+STUB_EVAL_LOG="$work/js/related.js" run graph related Sea/Tagged.md --tag-max-notes 5
+out=$(node "$fake_app" "$work/js/related.js" 2>&1) || fail "related: node could not run the query: $out"
+want_out "1	tag	Sea/Lone.md" "graph related in node"
+checks=$((checks + 1))
+
+# selftest sums the vault's tags the way find reads them, under getTags' own counting rules,
+# and has to land on exactly the count Obsidian writes out by hand in tests/fake-app.js —
+# nested parents, one tag in two cases, a placeholder and a number that are no tags, and an
+# excluded file all included
+STUB_EVAL_LOG="$work/js/selftest.js" run selftest
+out=$(node "$fake_app" "$work/js/selftest.js" 2>&1) || fail "selftest: node could not run the query: $out"
+want_out "tags agree with Obsidian's own count (5 tags)" "selftest in node on a vault that agrees"
+checks=$((checks + 1))
+
+# And when Obsidian counts differently — the drift selftest exists to notice — every tag
+# that differs is named with both counts, and the answer is an error
+out=$(FAKE_GETTAGS=drift node "$fake_app" "$work/js/selftest.js" 2>&1) || fail "selftest: node could not run the query: $out"
+want_out "Error: " "selftest in node on a vault that drifted"
+want_out "#x	ours 2	obsidian 3" "selftest in node on a vault that drifted"
+checks=$((checks + 1))
+
 # ---- every check above is able to fail -----------------------------------------------------
 # A copy of obsi.sh with one defect planted must send this same file red. Each defect is one
 # that was actually hit while writing the wrapper, so the suite is pinned to real failures
@@ -532,6 +622,51 @@ expect_red "$(plant value-not-a-marker '/^        --value)$/,/;;$/s/markers=.*/:
 # shellcheck disable=SC2016
 expect_red "$(plant scope-always 's/^    scope=""$/    scope="${prop%%=*}"/')" \
   "--prop confining the value match even without --value" "confined the value match to the filtered property"
+
+# The JavaScript half, one plant per question the fake vault asks
+expect_red "$(plant js-prop-marker-off "s/if (on('prop')) for/if (on('none')) for/")" \
+  "the index query ignoring the property-value marker" "find --value in node"
+
+expect_red "$(plant js-scope-dropped '/if (scope ? k !== scope/s/scope ? k !== scope : //')" \
+  "the index query dropping the --value scope" "find --value --prop status in node"
+
+expect_red "$(plant js-string-split "s/return \[v.trim()\]/return v.split(',').map(x => x.trim())/")" \
+  "a frontmatter string split on commas" "a comma string alias in node"
+
+expect_red "$(plant js-list-split '/typeof x === .string./s/\.map(x => x\.trim())/.flatMap(x => x.split(",")).map(x => x.trim())/')" \
+  "a frontmatter list item split on commas" "a list alias holding a comma in node"
+
+expect_red "$(plant js-tag-spaces-kept '/const fmTags/s/ \&\& !t\.includes(. .)//')" \
+  "a tag holding a space kept as a tag" "tags: a, b in node"
+
+# shellcheck disable=SC2016
+expect_red "$(plant js-keys-case-sensitive 's|/^aliases$/i|/^aliases$/|; s|/^tags$/i|/^tags$/|')" \
+  "the tags and aliases keys matched in one case only" "a mixed-case key in node"
+
+expect_red "$(plant js-related-hash 's/fmTags(fm).map(t => t.slice(1))/fmTags(fm)/')" \
+  "graph related comparing a frontmatter #x with an inline x" "graph related in node"
+
+expect_red "$(plant selftest-passes-through '/^  selftest)$/,/^    ;;$/d')" \
+  "selftest handed to the CLI as an unknown command" "selftest when the counts agree"
+
+# selftest's counting, one plant per rule of getTags it has to reproduce
+expect_red "$(plant js-selftest-no-parents '/if (last !== t) count/d')" \
+  "selftest not counting a nested tag toward its parent" "selftest in node on a vault that agrees"
+
+expect_red "$(plant js-selftest-invalid-counted 's/if (!valid.test(t) || numeric.test(t)) return/if (numeric.test(t)) return/')" \
+  "selftest counting a tag Obsidian refuses, such as a template placeholder" "selftest in node on a vault that agrees"
+
+expect_red "$(plant js-selftest-numbers-counted 's/if (!valid.test(t) || numeric.test(t)) return/if (!valid.test(t)) return/')" \
+  "selftest counting a number as a tag" "selftest in node on a vault that agrees"
+
+expect_red "$(plant js-selftest-case-sensitive 's/const k = t.toLowerCase()/const k = t/')" \
+  "selftest keeping one tag in two cases apart" "selftest in node on a vault that agrees"
+
+expect_red "$(plant js-selftest-ignored-counted '/isUserIgnored(f.path)) continue/d')" \
+  "selftest counting the vault's excluded files" "selftest in node on a vault that agrees"
+
+expect_red "$(plant js-selftest-silent 's/^if (rows.length)$/if (false)/')" \
+  "selftest that never reports a difference" "selftest in node on a vault that drifted"
 
 expect_red "$(plant out-stays-exported '/^export -n out err$/d')" \
   "an exported \$out from the caller left on the wrapper's own locals" "find under an exported"

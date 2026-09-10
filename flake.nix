@@ -22,6 +22,8 @@
             actionlint
             shellcheck
             shfmt
+            # runs the JavaScript obsi.sh hands to eval, against a fake app
+            nodejs
           ];
         };
       });
