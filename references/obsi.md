@@ -1,12 +1,12 @@
 # `obsi.sh` — the wrapper, in full
 
-`obsi.sh` sits at the root of this skill. It adds two things the CLI has no command for and passes everything else through untouched, so `obsi.sh read path=note.md` is `read path=note.md` with the traps handled. Measured against Obsidian 1.13.7 (installer 1.13.4)
+`obsi.sh` sits at the root of this skill. It adds what the CLI has no command for and passes everything else through untouched, so `obsi.sh read path=note.md` is `read path=note.md` with the traps handled. Measured against Obsidian 1.13.7 (installer 1.13.4)
 
 Everything it adds is computed inside the running app through `eval`, which is the CLI's own command, and only the answer crosses back. That is not a stylistic preference: it is the difference between 178 bytes and 1 087 045 for the same question
 
 ## Why it exists at all
 
-A wrapper around a working CLI has to earn its place. These are the four things it does that every caller would otherwise repeat, each of which fails silently:
+A wrapper around a working CLI has to earn its place. These are the things it does that every caller would otherwise repeat, each of which fails silently:
 
 | Trap | What the wrapper does |
 | --- | --- |
@@ -65,9 +65,9 @@ Columns are **score**, **why it matched** (several joined by `+`), **path**, and
 | tag | — | 4 |
 | property value | — | 4 |
 | heading | — | 3 |
-| body | — | 1 |
+| text — anything `search` matched, frontmatter included | — | 1 |
 
-Scores add up across markers, so a note matching by alias and in its text outranks one that only appears in the text. They are deliberately coarse: the ranking is a convenience, the **reason column is the point**, because it makes a wrong hit visible instead of plausible
+Each field counts once, at its best match, and the fields add up, so a note matching by alias and in its text outranks one that only appears in the text — but four matching headings no longer outrank an exact filename, which they did while scores were summed inside a field. They are deliberately coarse: the ranking is a convenience, the **reason column is the point**, because it makes a wrong hit visible instead of plausible
 
 Where the ranking stops meaning anything is a marker that scores every hit identically. A common tag is the case that bites: 649 notes carry the same one on the vault measured, all at 4 points, and the order among them is alphabetical, which is to say arbitrary. So the cut is announced rather than made in silence — `find` prints what it dropped, and a search that answers "these are the notes with that tag" from twenty rows out of 649 is wrong in a way nothing else would have shown:
 
@@ -103,14 +103,50 @@ largest component	1175
 
 | Query | Answers |
 | --- | --- |
-| `graph` | the eight numbers above |
+| `graph` | the summary above. Its link counts are (source, target) pairs: a note linking another three times counts once, which is neither what `unresolved total` counts (unique targets) nor what `counts` does (occurrences) |
 | `graph hubs [N]` | the most linked-to notes, incoming count first. Whatever is at the top is the vault's real MOC, named one or not |
 | `graph ends [N]` | one note per line: what nothing points to, and what points nowhere |
 | `graph components [N] [M]` | one **group** per line, largest first: size, then up to `M` members joined by ` \| `. Defaults 10 and 5 |
-| `graph path FROM TO` | a shortest route from one note to another, one path per line |
+| `graph related NOTE [N] [--tag-max-notes K]` | what a note is connected to without being linked to it — see below |
+| `graph unresolved [N]` | broken links as one row per target, source and count |
+| `graph path FROM TO` | a shortest route from one note to another, one note per line, following links only in the direction they are written — so "No path found." means no route that way, not that the two are unconnected |
 | `graph dump [FILE]` | the whole graph as JSON, written to `FILE` (default `graph.json`); prints only the size and where it went |
 
 Attachments are counted but left out of the walk: an image linked from forty notes is an edge in the index, not a hub
+
+### `related` — connected without an edge
+
+Direct neighbours are left out on purpose: `links` and `backlinks` answer those already, and what is wanted here is a connection the vault holds without a link to show for it. Three signals, weighted by how much each one actually says:
+
+| Signal | Worth | What it means |
+| --- | --- | --- |
+| `co-cited` | 2 | something links to this note and to that one — the strongest, because a third party put them in the same context |
+| `shares-links` | 2 | both notes point at the same things: the same argument read from the other end |
+| `tag` | 1 | a tag in common, **counted only while the tag still distinguishes anything** |
+
+That last condition is what makes the query usable. Without it, on the vault measured, a note came back with 873 related notes and every one of them carried `tag` as a reason, because a tag on 649 of 1300 notes is a category — a course, a year, a note type — and sharing it says nothing
+
+`--tag-max-notes N` is how many notes a tag may be on and still count as a signal — **not** a number of tags. A tag on five notes says those five are about one thing; a tag on 649 says only that the vault has a category. It defaults to a twentieth of the vault, and the three settings on the same note gave 18, 51 and 873 results:
+
+```console
+$ ./obsi.sh --vault Vault graph related "…/Address types.md" --tag-max-notes 0       # structure only
+$ ./obsi.sh --vault Vault graph related "…/Address types.md"                         # the default
+$ ./obsi.sh --vault Vault graph related "…/Address types.md" --tag-max-notes 100000  # every tag counts
+```
+
+The threshold is a cliff rather than a curve — a tag on 65 notes counts fully and one on 66 not at all — which is why it is a flag and not a secret. A vault whose tags are all narrow wants a higher one; a vault tagged by topic wants `--tag-max-notes 0`
+
+Unlinked mentions — a note naming this one in prose without a wikilink — are **not** among the signals. `metadataCache` does not hold them, and the substitute is one `search` per name and alias, which is approximate and belongs to a tool that reads the vault's text directly
+
+### `unresolved` — the pairs the command cannot print
+
+The first-party `unresolved` already lists broken links, and this does not replace it. The one thing it cannot do is say which file each one came from: it joins every source into a single field with `, `, and vault paths contain commas, so the field cannot be parsed back. One row per pair leaves nothing to parse:
+
+```console
+$ ./obsi.sh --vault Vault graph unresolved 200 | grep '^00. Attachments/scans'
+00. Attachments/scans	05. Notes/Calculus — MOC.md	1
+00. Attachments/scans	05. Notes/English — MOC.md	1
+```
 
 ### `ends` and `components` are not the same question
 

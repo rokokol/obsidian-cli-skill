@@ -16,7 +16,7 @@ Written against Obsidian **1.13.7 (installer 1.13.4)** on Linux. Behaviour below
 2. **Confirm the app is running.** With no reachable app every call prints `The CLI is unable to find Obsidian. Please make sure Obsidian is running and try again` and exits **1** — the only condition that sets a non-zero status. Do not expect the CLI to start Obsidian for you; on a packaged install it does not
 3. **Ask the app what it can do.** `<cli> help` lists the commands available *right now*. The list is not fixed: `daily:*`, `unique`, `web`, `workspaces`, `publish:*` and `sync:*` appear only when the matching core plugin or service is enabled. Treat `help` as the reference and never guess a command from documentation
 
-## The four rules that prevent wrong answers
+## The rules that prevent wrong answers
 
 These cost one line each and are the difference between a real answer and a plausible one
 
@@ -33,7 +33,7 @@ These cost one line each and are the difference between a real answer and a plau
 | Structure without the body | `outline path=…`, `properties path=…`, `wordcount path=…` |
 | Neighbours of a note | `backlinks path=…`, `links path=…` |
 | Find text | `search query=… limit=10`, `search:context query=… limit=5` for matching lines |
-| Find the note itself, not just the text mentioning it | `obsi.sh find "…" [--alias\|--tag\|--name\|--prop …]` |
+| Find the note itself, not just the text mentioning it | `obsi.sh find "…"`, narrowed by field or filtered by property — see `obsi.sh --help` |
 | Vault-wide metadata | `tags counts sort=count`, `properties counts sort=count`, `aliases verbose` |
 | Broken links | `unresolved verbose` |
 | Unlinked notes | `orphans`, `deadends` |
@@ -41,7 +41,9 @@ These cost one line each and are the difference between a real answer and a plau
 | Create or overwrite | `create path=… content=… overwrite` |
 | Add to a note | `append path=… content=…`, `prepend path=… content=…` (lands after the frontmatter) |
 | Set one property | `property:set path=… name=… value=… type=list` |
-| The vault's graph as a whole | `obsi.sh graph`, then `hubs`, `ends`, `components`, `path`, `dump` |
+| The vault's graph as a whole | `obsi.sh graph` and the queries `obsi.sh --help` lists |
+| What a note relates to without linking to it | `obsi.sh graph related "folder/note.md"` |
+| Broken links with the file each came from | `obsi.sh graph unresolved` — `unresolved verbose` joins its sources unparseably |
 | Anything the CLI has no command for | `eval code=…` against the app's own API |
 
 Values with spaces need quoting; `\n` and `\t` work inside `content=`. To target another vault, `vault=<name>` must come **before** the command word — a bare vault name as the first argument is not accepted
@@ -57,7 +59,7 @@ Values with spaces need quoting; `\n` and `\t` work inside `content=`. To target
 - **A link written through an alias counts as broken.** Alias resolution is a UI convenience; the index resolves by filename only, so `[[Tun]]` lands in `unresolved` and never appears in the target's `backlinks`. Before calling an unresolved target a broken link, check it against `aliases`
 - **`total` is not one thing.** `backlinks … total` counts occurrences (12 across 11 files here), while `orphans total` and `unresolved total` count unique targets. Use `counts` to get occurrences per file
 - **`links` marks broken targets inline** with a trailing ` (unresolved)` in the plain-text output
-- **An unresolved target is not automatically a defect.** Three kinds share the list and want different answers: a note deliberately not written yet, a typo or an alias link, and a link written as an explicit path to a file that exists somewhere else. Read a sample before treating the list as a repair queue
+- **An unresolved target is not automatically a defect.** Several kinds share the list and want different answers — a note deliberately not written yet, a template placeholder, a typo or an alias link, a link written as an explicit path to a file that exists somewhere else; [commands.md](references/commands.md#what-an-unresolved-target-actually-is) has them with their shares. Read a sample before treating the list as a repair queue
 - **Unlinked mentions have no command at all.** The app's Outgoing links panel shows them beside unresolved links, but `metadataCache` carries only `resolvedLinks` and `unresolvedLinks`, so `eval` does not reach them either. A neighbour mentioned by name without a wikilink is invisible to every command here; `search query="<name or alias>"` minus the files that already link is the manual substitute
 
 ## Writing

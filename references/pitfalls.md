@@ -40,6 +40,23 @@ A graph query issued immediately after a write can be answered from the pre-writ
 
 Writing the file directly with a shell redirect behaves the same way: stale at 0 s, fresh from 0.2 s. Writing through the CLI is still preferable — it keeps any open editor in step — but neither route makes the index synchronous. Re-read before reporting success
 
+### The first call to a vault left alone answers that the command does not exist
+
+Against a vault the app has not been asked about for a while, the first command of any kind comes back as unknown, and the identical call straight after it succeeds:
+
+```console
+$ obsidian-cli vault=Sandbox aliases total
+Error: Command "aliases" not found. Did you mean: bases?
+$ obsidian-cli vault=Sandbox create path="Notes/one.md" content="x"
+Error: Command "create" not found. Did you mean: base:create?
+$ obsidian-cli vault=Sandbox create path="Notes/one.md" content="x"
+Created: Notes/one.md
+```
+
+The suggestion changes with the command but its shape does not: the registry is not populated yet, so the fuzzy match reaches for whatever few commands are already in it. Seen four times across a session, on `create` and on `aliases` alike, and reproduced deliberately
+
+It matters more than it looks, because it arrives as an application error — **stdout, exit 0** — so a script that creates a batch of notes takes it for success and silently skips the first one. It cost exactly that here: a repro built three notes, the first was never written, and the result looked plausible enough to reason about before the gap was noticed. Fire one cheap call, ignore its answer, then start
+
 ### The CLI reads stdin, so a `while read` loop runs once
 
 The loop below is the obvious way to visit every note, and it visits one:
