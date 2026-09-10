@@ -8,7 +8,7 @@
 ![Obsidian](https://img.shields.io/badge/Obsidian-7C3AED?style=flat&logo=obsidian&logoColor=white)
 ![Bash](https://img.shields.io/badge/Bash-4EAA25?style=flat&logo=gnubash&logoColor=white)
 [![license](https://img.shields.io/badge/MIT-3DA639?style=flat)](LICENSE)
-[![ci](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/ci.yml)
+[![ci](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/build.yml/badge.svg)](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/build.yml)
 
 </div>
 

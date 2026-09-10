@@ -7,6 +7,14 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  # Called by vendor-sync.yml against its temp branch, so new vendored copies are checked by
+  # this file rather than by a copy of its commands
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -17,6 +25,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: cachix/install-nix-action@v31
       - name: check.sh (the gate, self-tested against known-bad fixtures)
         run: nix develop --no-write-lock-file -c ./check.sh

@@ -18,7 +18,7 @@ cd "$HERE"
 
 # One source of truth for what gets linted. A second copy of this list drifts, and a
 # drifted list lies about what was checked.
-scripts=(check.sh check-skill.sh check-pins.sh check-changelog.sh check-obsi.sh obsi.sh tests/stub-cli.sh)
+scripts=(check.sh check-skill.sh check-pins.sh check-changelog.sh vendor-sync.sh check-obsi.sh obsi.sh tests/stub-cli.sh)
 skill_name=obsidian-cli
 
 fail() {
@@ -44,8 +44,12 @@ shfmt -d -i 2 -ci "${scripts[@]}"
 echo "== the workflows are valid, and their tools come from the lock rather than a registry"
 [[ -d .github/workflows ]] || fail ".github/workflows is missing — nothing gates this repository"
 actionlint
-# The pin guard, copied verbatim from the ci skill: it proves on every run that it catches
-# each unpinned shape and stays quiet on the pinned spellings, then scans the workflows
+# The checkers here are vendored — from the ci skill, and check-changelog.sh from the
+# versioning skill: every copy must still be the blob .github/vendor.lock records, so one
+# edited here instead of at its source fails by name
+./vendor-sync.sh check
+# The pin guard proves on every run that it catches each unpinned shape and stays quiet on
+# the pinned spellings, then scans the workflows
 ./check-pins.sh
 
 echo "== SKILL.md loads, every reference is reachable, and every link and anchor resolves"
