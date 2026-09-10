@@ -1,6 +1,6 @@
 ---
 name: obsidian-cli
-description: "Drive a running Obsidian vault from the terminal through the official Obsidian CLI — read and write notes, find a note by name, alias, tag or property, query and summarise the whole link graph, search, manage properties, tags and tasks. Use whenever a request needs vault data or a vault operation rather than an explanation of Obsidian's UI. Russian triggers: обсидиан, обсидиан цли, обсидиан кли, обсидианкли, волт, вики, заметка, заметки, моя вики, найди в заметках, найди заметку, как называется заметка, поиск по алиасу, создай заметку, обратные ссылки, бэклинки, битые ссылки, сироты, теги заметок, свойства заметки, алиасы, граф заметок, граф связей, связность вики, острова заметок, изолированные заметки, самые цитируемые заметки, путь между заметками"
+description: "Drive a running Obsidian vault from the terminal through the official Obsidian CLI — read and write notes, find a note by name, alias, tag or property, query and summarise the whole link graph, search, manage properties, tags and tasks. Use whenever a request needs vault data or a vault operation rather than an explanation of Obsidian's UI. Triggers: Obsidian, obsidian-cli, vault, note, notes, backlinks, broken links, orphans, aliases, frontmatter properties, tasks in notes, link graph, most linked notes, related notes, path between notes. Russian triggers: обсидиан, обсидиан цли, обсидиан кли, обсидианкли, волт, вики, заметка, заметки, моя вики, найди в заметках, найди заметку, как называется заметка, поиск по алиасу, создай заметку, обратные ссылки, бэклинки, битые ссылки, сироты, теги заметок, свойства заметки, алиасы, граф заметок, граф связей, связность вики, острова заметок, изолированные заметки, самые цитируемые заметки, связанные заметки, путь между заметками, задачи в заметках"
 license: MIT
 ---
 
@@ -48,7 +48,7 @@ These cost one line each and are the difference between a real answer and a plau
 
 Values with spaces need quoting; `\n` and `\t` work inside `content=`. To target another vault, `vault=<name>` must come **before** the command word — a bare vault name as the first argument is not accepted
 
-[`obsi.sh`](obsi.sh) sits beside this file and wraps the CLI rather than replacing it: anything it does not recognise passes through with rules 1 and 4 applied. `search` already matches a filename, an alias, a tag, a property value and a heading alike, because the frontmatter is part of the file's text — what it cannot do is say **which** of those matched or be restricted to one, and that is all `find` adds to it. `graph` reaches the link graph, which no command exposes, and never prints it whole. Flags and limits — [`references/obsi.md`](references/obsi.md)
+[`obsi.sh`](obsi.sh) sits beside this file and wraps the CLI rather than replacing it: what it does not recognise passes through with rules 1 and 4 applied, `find` says which field of a note matched — something `search`, which matches them all, cannot — and `graph` answers about the whole link graph without printing it. Flags, limits and why — [`references/obsi.md`](references/obsi.md)
 
 ## Reading the graph
 
@@ -80,7 +80,8 @@ Prefer the CLI over editing files directly: it goes through the app, so the inde
 
 - [`references/commands.md`](references/commands.md) — output shape, counting semantics and one worked example per command group, all measured on a live vault. What `help` does not tell you
 - [`references/pitfalls.md`](references/pitfalls.md) — every trap above with its reproduction, plus setup problems and the places the official documentation and the local build disagree
+- [`references/obsi.md`](references/obsi.md) — the wrapper in full: every `find` and `graph` flag, how results are scored, and what each query cannot see
 
 This skill covers the CLI only. How a particular vault's notes are written and organised — style, indexes, icons, diagrams, its own tooling — is set somewhere else, if it is set at all: most often by skills the vault carries itself, one per concern. Do not assume those rules exist, and do not invent them where they do not
 
-Where such a skill lives depends on the agent — whichever skills directory it reads, under the vault, which for Claude Code is `<vault>/.claude/skills/`. The harness offers them only to a session started under the vault, so from anywhere else they are absent from the skill list while existing on disk. Before writing into a vault, look in that directory and read the relevant `SKILL.md` and its presets by path. A skill missing from the list means it was not offered to this session, never that it does not exist
+Where such a skill lives depends on the agent — whichever skills directory it reads, under the vault, which for Claude Code is `<vault>/.claude/skills/`. The harness offers them only to a session started under the vault, so from anywhere else they are absent from the skill list while existing on disk. Before writing into a vault, look in that directory and read the relevant `SKILL.md` and the files it points to by path. A skill missing from the list means it was not offered to this session, never that it does not exist
