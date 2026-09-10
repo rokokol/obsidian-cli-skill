@@ -89,7 +89,11 @@ export PATH
 
 # ---- reaching the client ----------------------------------------------------------------
 
-unset STUB_NO_APP STUB_ERROR STUB_META STUB_SEARCH STUB_ALLOWED STUB_JS_ERROR STUB_LOG || true
+# Every variable the stub reads, taken from the stub itself. The hand-kept list this replaced
+# had already missed STUB_META_FILE, so a value inherited from the calling shell would have
+# reached the find checks and quietly changed what they tested
+# shellcheck disable=SC2046 # splitting the list into words is the point
+unset $(grep -o 'STUB_[A-Z_]*' "$stub" | sort -u) || true
 export STUB_LOG="$work/calls.log"
 : >"$STUB_LOG"
 
@@ -115,6 +119,18 @@ STUB_NO_APP=1 run read path=x.md
 want_status 1 "no running app"
 want_out "Obsidian is not running" "no running app"
 want_not_out "Install one" "no running app"
+checks=$((checks + 1))
+
+# Once a client has answered that the app is down, nothing further is probed: the next name
+# in line may be `obsidian`, which on a packaged install is the GUI launcher and opens a
+# window instead of answering. The shadowed launcher records whether it was ever run
+printf '#!/bin/sh\ntouch "%s"\nexit 0\n' "$work/launcher-was-run" >"$work/shadow/obsidian"
+chmod +x "$work/shadow/obsidian"
+STUB_NO_APP=1 run version
+want_status 1 "a client reporting the app down"
+if [[ -e "$work/launcher-was-run" ]]; then
+  fail "after a client reported the app down, the wrapper went on to run \`obsidian\` — the GUI launcher on packaged installs"
+fi
 checks=$((checks + 1))
 
 # ---- the dishonest exit status ----------------------------------------------------------
@@ -174,9 +190,9 @@ Notes/Mentions it once.md"
 run find unicast
 want_status 0 "find merging two sources"
 first=$(printf '%s\n' "$out" | sed -n 1p)
-[[ "$first" == "10	alias+body	Networks/Address types.md	unicast" ]] ||
+[[ "$first" == "10	alias+text	Networks/Address types.md	unicast" ]] ||
   fail "find did not merge the two sources into one ranked row: got '$first'"
-want_out "1	body	Notes/Mentions it once.md" "find merging two sources"
+want_out "1	text	Notes/Mentions it once.md" "find merging two sources"
 checks=$((checks + 1))
 
 # What was cut has to be said out loud, and saying it must not cost the exit status: `head`
@@ -229,6 +245,28 @@ want_out "Kept/One.md" "--prop filtering both halves"
 checks=$((checks + 1))
 unset STUB_ALLOWED
 
+# A text search that hit its own cap makes the count of what was left out a floor, and the
+# notice has to say so rather than state a number that is only a lower bound
+export STUB_META=""
+export STUB_SEARCH="N/one.md
+N/two.md
+N/three.md"
+run find x --body --limit 1
+want_status 0 "find with a capped text search"
+want_out "at least 2 more" "find with a capped text search"
+checks=$((checks + 1))
+
+# The CLI's own `vault=NAME` spelling, before the command word, has to reach the wrapper's
+# own commands as well; it used to go to the CLI as a vault selector followed by `find`
+: >"$STUB_LOG"
+export STUB_META="9	alias	A.md	x"
+export STUB_SEARCH="No matches found."
+run vault=Other find x
+want_status 0 "vault= before a wrapper command"
+grep -q '^vault=Other	eval	' "$STUB_LOG" ||
+  fail "vault= before find did not reach the query as a vault selector: $(cat "$STUB_LOG")"
+checks=$((checks + 1))
+
 # ---- arguments the wrapper rejects --------------------------------------------------------
 
 run find x --limit abc
@@ -243,6 +281,63 @@ checks=$((checks + 1))
 run graph nonsense
 want_status 1 "an unknown graph query"
 want_out "unknown graph query" "an unknown graph query"
+checks=$((checks + 1))
+
+# The JavaScript behind `related` cannot run against a stub, but the argument it refuses to
+# work without can: without a note it would otherwise send `undefined` into the app
+run graph related
+want_status 1 "graph related with no note"
+want_out "needs a note path" "graph related with no note"
+checks=$((checks + 1))
+
+# An option it does not know must be refused, not taken as a row count. Swallowing an
+# unknown argument is the CLI's own habit and the reason this wrapper exists
+run graph related "a.md" --no-such-flag 3
+want_status 1 "an unknown option to graph related"
+want_out "unknown option" "an unknown option to graph related"
+checks=$((checks + 1))
+
+# A count is spliced into JavaScript run inside the live app, so anything that is not a plain
+# number has to be refused before any of it is built. `app` is a name in that scope and was
+# silently coerced to zero rows; the crafted value below would have run as code
+: >"$STUB_LOG"
+run graph hubs app
+want_status 1 "a row count that names something in the app's scope"
+want_out "positive number" "a row count that names something in the app's scope"
+checks=$((checks + 1))
+
+: >"$STUB_LOG"
+run graph hubs '5, (function(){throw new Error("injected")})()'
+want_status 1 "a hostile row count"
+# Refusing is not enough on its own: nothing may have been sent to the app first
+if grep -q 'code=' "$STUB_LOG"; then
+  fail "a hostile row count: JavaScript reached the app before the value was refused"
+fi
+checks=$((checks + 1))
+
+# The row count of `related` goes through the same validator; an independent review found
+# that removing its check left every test green
+run graph related a.md not-a-number
+want_status 1 "a non-numeric row count to graph related"
+want_out "positive number" "a non-numeric row count to graph related"
+checks=$((checks + 1))
+
+# The vault belongs before the command word. After it the CLI drops it in silence and
+# answers for whichever vault is open, so the wrapper has to refuse it instead
+run backlinks path=note.md total --vault "Other Vault"
+want_status 1 "--vault after the command word"
+want_out "before the command word" "--vault after the command word"
+checks=$((checks + 1))
+
+run backlinks path=note.md vault=Other
+want_status 1 "vault= after the command word"
+want_out "before the command word" "vault= after the command word"
+checks=$((checks + 1))
+
+# A missing value answers in the tool's own voice, not bash's `line N: 2: …`
+run --vault
+want_status 1 "--vault with no name"
+want_out "obsi: --vault needs a name" "--vault with no name"
 checks=$((checks + 1))
 
 run find
@@ -325,7 +420,7 @@ expect_red "$(plant head-not-awk 's|awk -v n="\$limit" .NR <= n.|head -n "$limit
   "larger than a pipe buffer"
 
 # shellcheck disable=SC2016
-expect_red "$(plant unquoted-vault 's|prefix=("vault=\${2:?--vault needs a name}")|prefix=(vault= "${2:?--vault needs a name}")|')" \
+expect_red "$(plant unquoted-vault 's|prefix=("vault=\$2")|prefix=(vault= "$2")|')" \
   "a vault name split into two arguments" "arrived split"
 
 expect_red "$(plant no-empty-sentence 's|echo "No matches found."|echo ""|')" \
@@ -334,5 +429,14 @@ expect_red "$(plant no-empty-sentence 's|echo "No matches found."|echo ""|')" \
 expect_red "$(plant no-prop-filter '/grep -Fxf/s/.*/      :/')" \
   "--prop applied to the index half only, leaving the body half unfiltered" \
   "--prop filtering both halves"
+
+expect_red "$(plant hubs-unvalidated '/^    hubs)$/,/;;$/s/need_count.*/:/')" \
+  "the row count of graph hubs spliced into JavaScript without being checked" \
+  "a row count that names something in the app's scope"
+
+# shellcheck disable=SC2016
+expect_red "$(plant probes-on '/unreachable="\$candidate"/{n;s/break/continue/;}')" \
+  "discovery probing on after a client reported the app down" \
+  "went on to run"
 
 echo "check-obsi: $checks checks passed, $planted planted defects caught"

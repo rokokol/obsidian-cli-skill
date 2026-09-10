@@ -12,6 +12,7 @@
 #   STUB_LOG      file to append one tab-separated argv line per call
 #   STUB_NO_APP   answer every call the way the CLI does with no app, and exit 1
 #   STUB_META     what an `eval` carrying find's metadata query returns, before `=> `
+#   STUB_META_FILE the same from a file, for a payload too big for the environment
 #   STUB_ALLOWED  what an `eval` carrying the --prop allowlist query returns
 #   STUB_SEARCH   what `search` returns
 #   STUB_ERROR    a command name that must answer `Error: …` at exit 0
