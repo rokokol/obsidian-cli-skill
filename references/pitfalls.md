@@ -76,7 +76,7 @@ $ while IFS= read -r f; do obsidian-cli links path="$f" </dev/null; done < list 
 7161
 ```
 
-The same applies to `xargs`, to `find -exec … \;` and to any loop reading from a pipe. Give every call `</dev/null` unless you are deliberately feeding it something
+The general rule — every call inside a loop that reads a pipe gets `</dev/null`, `xargs` and `find -exec` included — is the [bash-best-practices](https://github.com/rokokol/bash-best-practices-skill) skill's, in its `references/pitfalls.md`, with this measurement as its evidence
 
 ## The link graph is Obsidian's, not the file's
 

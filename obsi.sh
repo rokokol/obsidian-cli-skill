@@ -13,7 +13,9 @@
 # caller. What they are, why each is handled the way it is, and the measurements behind both
 # are in references/obsi.md, and not repeated here
 #
-# Needs: bash 3.2, a running Obsidian 1.12+, and standard POSIX tools
+# Exit 0 done, 1 when the CLI or the vault answered with an error, 2 on a usage error.
+# Nothing here reaches the network. Needs bash 3.2 and POSIX tools only, and a running
+# Obsidian 1.12+ to talk to
 set -euo pipefail
 
 # A nix dev shell exports $out, the build's output path, and bash keeps that export on a
@@ -712,9 +714,10 @@ done
 
 bin=$(find_cli)
 
-case "$1" in
+cmd="$1"
+shift
+case "$cmd" in
   find)
-    shift
     (($#)) || die "find needs something to look for"
     query="$1"
     shift
@@ -758,25 +761,23 @@ case "$1" in
     [[ -z "$value_flag" || -z "$prop" ]] || scope="${prop%%=*}"
     find_notes "$query" "$limit" "${markers# }" "$prop" "$scope"
     ;;
-  graph)
-    shift
-    graph "$@"
-    ;;
+  graph) graph "$@" ;;
   selftest)
-    (($# == 1)) || die "selftest takes no arguments"
+    (($# == 0)) || die "selftest takes no arguments"
     answer self_test
     ;;
   *)
-    # `vault=` and `--vault` both belong before the command word. After it the CLI drops
-    # them in silence and answers for whichever vault happens to be open, so they are
-    # refused here rather than passed along to be ignored
+    # pass-through: anything not recognised above is the CLI's own command, with its
+    # traps handled. `vault=` and `--vault` both belong before the command word: after it
+    # the CLI drops them in silence and answers for whichever vault happens to be open,
+    # so they are refused here rather than passed along to be ignored
     command_word=""
-    for arg in "$@"; do
+    for arg in "$cmd" "$@"; do
       if [[ -n "$command_word" && ("$arg" == vault=* || "$arg" == --vault) ]]; then
         die "the vault goes before the command word: obsi.sh --vault NAME $command_word …"
       fi
       [[ -n "$command_word" || "$arg" == vault=* ]] || command_word="$arg"
     done
-    cli "$@"
+    cli "$cmd" "$@"
     ;;
 esac

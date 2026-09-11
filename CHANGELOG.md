@@ -2,6 +2,13 @@
 
 Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dated rather than numbered, and with no `Unreleased` section — this repository is read at whatever revision you have checked out, so whatever is on the default branch is what every reader already has
 
+## 2026-09-11
+
+### Changed
+
+- `obsi.sh` dispatches on `cmd="$1"` in the family's canonical shape, says its exit codes in its header — 0, 1 when the CLI or the vault answered with an error, 2 on a usage error — and is held to that header by the [bash-best-practices](https://github.com/rokokol/bash-best-practices-skill) skill's `check-sh.sh`, vendored: its subcommands, flags and codes in the help, and every `obsi.sh …` in `SKILL.md` and `README.md` a real one, where a passed-through CLI command counts as real because the `*)` arm forwards rather than refuses. The readme names `obsi.sh find`, `obsi.sh graph` and `obsi.sh selftest`, which it never had
+- the rule behind closing stdin on every call inside a loop is that skill's now; `references/pitfalls.md` keeps the measurement and points there
+
 ## 2026-09-10
 
 ### Added

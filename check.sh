@@ -18,7 +18,7 @@ cd "$HERE"
 
 # One source of truth for what gets linted. A second copy of this list drifts, and a
 # drifted list lies about what was checked.
-scripts=(check.sh check-skill.sh check-pins.sh check-changelog.sh vendor-sync.sh check-obsi.sh obsi.sh tests/stub-cli.sh)
+scripts=(check.sh check-sh.sh check-skill.sh check-pins.sh check-changelog.sh vendor-sync.sh check-obsi.sh obsi.sh tests/stub-cli.sh)
 skill_name=obsidian-cli
 
 fail() {
@@ -56,6 +56,14 @@ echo "== SKILL.md loads, every reference is reachable, and every link and anchor
 # The one gate every skill repository shares, copied verbatim from the ci skill. It plants
 # a defect per check on every run, so nothing here has to prove it separately
 ./check-skill.sh -n "$skill_name" .
+
+echo "== the wrapper's help and these documents agree with its dispatcher"
+# The bash-best-practices skill's check-sh.sh, vendored: obsi.sh's own subcommands, its
+# flags and its exit codes must be in its help, and every `obsi.sh …` these documents
+# spell must be one of them — or, since the wrapper passes unknown words through to the
+# CLI, any command at all, which the checker allows once it sees the *) arm forward
+# rather than refuse. It plants its own defects on every run
+./check-sh.sh -d SKILL.md -d README.md obsi.sh
 
 echo "== the wrapper's shell half behaves, against a fake CLI"
 # The shell half against the stub, and the JavaScript the wrapper builds for find, graph
