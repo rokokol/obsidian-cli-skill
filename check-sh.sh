@@ -318,6 +318,47 @@ has_token() { # has_token TOKEN <<<TEXT -> 0 when TEXT holds TOKEN as a whole to
   grep -qE -- "(^|[^[:alnum:]_-])$1([^[:alnum:]_-]|\$)"
 }
 
+# What a completion file offers, without the prose around it. A word in a comment is not
+# offered, and neither is one in a zsh description: the text in `[...]` after an option,
+# the part after the colon of a `'sub:description'` entry, the message between the first
+# colons of an `'N:message:action'` spec — whose action, `(run stop)`, is kept. Quotes are
+# walked a line at a time, so a `#` inside them is not a comment.
+offered_words() { # offered_words FILE 0|1 -> FILE with comments dropped, and zsh prose when 1
+  awk -v zsh="$2" '
+    function prose(s, n, f, i, out) {
+      if (!zsh) return s
+      gsub(/\[[^]]*\]/, "", s)
+      n = split(s, f, ":")
+      if (n < 2) return s
+      if (n == 2) return f[1]
+      out = f[1]
+      for (i = 2; i <= n && f[i] == ""; i++) out = out ":"
+      out = out ":"
+      for (i++; i <= n; i++) out = out ":" f[i]
+      return out
+    }
+    {
+      line = $0; out = ""; q = ""; body = ""
+      while (line != "") {
+        c = substr(line, 1, 1)
+        if (q == "") {
+          if (c == "#" && (out == "" || out ~ /[ \t]$/)) break
+          if (c == "\047" || c == "\"") { q = c; body = "" } else out = out c
+          line = substr(line, 2)
+        } else if (c == "\\" && q == "\"") {
+          body = body substr(line, 1, 2); line = substr(line, 3)
+        } else if (c == q) {
+          out = out q prose(body) q; q = ""; line = substr(line, 2)
+        } else {
+          body = body c; line = substr(line, 2)
+        }
+      }
+      if (q != "") out = out q body
+      print out
+    }
+  ' "$1"
+}
+
 # ---- the truth: read out of the code ---------------------------------------------
 # Subcommands, flags with the subcommand they belong to (`-` for a global one), the
 # environment variables read, the exit codes returned. Extractors that find nothing are
@@ -565,14 +606,18 @@ done
 
 # ---- the completions --------------------------------------------------------------
 if [[ -n "$comp_bash" ]]; then
+  offered_words "$comp_bash" 0 >"$work/offered.bash"
+  offered_words "$comp_zsh" 1 >"$work/offered.zsh"
   for f in "$comp_bash" "$comp_zsh"; do
+    words="$work/offered.bash"
+    [[ "$f" == "$comp_bash" ]] || words="$work/offered.zsh"
     for s in "${subs[@]+"${subs[@]}"}"; do
-      has_token "$s" <"$f" || finding "$s is dispatched by $name but absent from $f"
+      has_token "$s" <"$words" || finding "$s is dispatched by $name but absent from $f"
     done
     for e in "${flags[@]+"${flags[@]}"}"; do
       flag="${e#*	}"
       case "$flag" in -h | --help) continue ;; esac
-      has_token "$flag" <"$f" || finding "$flag is parsed by $name but absent from $f"
+      has_token "$flag" <"$words" || finding "$flag is parsed by $name but absent from $f"
     done
   done
   offered=0
@@ -580,7 +625,7 @@ if [[ -n "$comp_bash" ]]; then
     [[ -n "$flag" ]] || continue
     offered=$((offered + 1))
     known_flag "$flag" || finding "$flag is offered by a completion but not parsed by $name"
-  done < <(grep -ohE -- '--[a-z][a-z0-9-]+' "$comp_bash" "$comp_zsh" | sort -u)
+  done < <(grep -ohE -- '--[a-z][a-z0-9-]+' "$work/offered.bash" "$work/offered.zsh" | sort -u)
   ((offered > 0)) || finding "neither completion offers a single --flag — the extractor is broken, or the files are"
 fi
 
@@ -793,8 +838,30 @@ grep -v "'stop:" "$canon/_script.sh" >"$c/_script.sh"
 expect_red "$c" "stop is dispatched by script.sh but absent from $c/_script.sh" "a zsh completion missing a subcommand" -n script.sh -c "$c/script.sh.bash" "$c/_script.sh" "$c/script.sh"
 
 c=$(copy comp-ghost)
-printf '# --ghost is offered here and parsed nowhere\n' >>"$c/_script.sh"
+sed 's/words="-n --dry-run -l"/words="-n --dry-run -l --ghost"/' "$canon/script.sh.bash" >"$c/script.sh.bash"
 expect_red "$c" "--ghost is offered by a completion but not parsed by script.sh" "a completion offering a flag that is not parsed" -n script.sh -c "$c/script.sh.bash" "$c/_script.sh" "$c/script.sh"
+
+c=$(copy comp-comment)
+# A word that survives only in a comment is not offered
+sed 's/words="-n --dry-run -l"/words="-n -l" # --dry-run is left out/' "$canon/script.sh.bash" >"$c/script.sh.bash"
+expect_red "$c" "--dry-run is parsed by script.sh but absent from $c/script.sh.bash" "a flag named only in a comment of the bash completion" -n script.sh -c "$c/script.sh.bash" "$c/_script.sh" "$c/script.sh"
+
+c=$(copy comp-description)
+# A subcommand that survives only in another entry's description is not offered
+grep -v "'stop:" "$canon/_script.sh" | sed "s/'run:do the thing'/'run:do the thing, or stop it'/" >"$c/_script.sh"
+expect_red "$c" "stop is dispatched by script.sh but absent from $c/_script.sh" "a subcommand named only in a zsh description" -n script.sh -c "$c/script.sh.bash" "$c/_script.sh" "$c/script.sh"
+
+c=$(copy comp-bracket)
+# A flag that survives only in the [...] text of another option is not offered
+sed "s/'(-n --dry-run)'{-n,--dry-run}'\[say what would be done\]'/'-n[say what would be done, as --dry-run does]'/" "$canon/_script.sh" >"$c/_script.sh"
+expect_red "$c" "--dry-run is parsed by script.sh but absent from $c/_script.sh" "a flag named only in a zsh option description" -n script.sh -c "$c/script.sh.bash" "$c/_script.sh" "$c/script.sh"
+
+c=$(copy comp-action)
+# The action of an `N:message:action` spec is what zsh offers, and it counts
+awk '/^  local -a subcommands$/ { skip = 1 } skip && /^  \)$/ { skip = 0; next } skip { next } { print }' "$canon/_script.sh" |
+  sed "s/'1:subcommand:->subcommand'/'1:subcommand:(run stop help)'/; s/subcommand) _describe 'subcommand' subcommands ;;/subcommand) ;;/" >"$c/_script.sh"
+nested "$c" -n script.sh -c "$c/script.sh.bash" "$c/_script.sh" "$c/script.sh" >/dev/null 2>&1 ||
+  die "self-test: a zsh completion offering its subcommands as an action list was rejected:"$'\n'"$(nested "$c" -n script.sh -c "$c/script.sh.bash" "$c/_script.sh" "$c/script.sh" 2>&1 || :)"
 
 c=$(copy claimed-bash4)
 plant "$c" 'HERE=' 'false && declar'"e -A m"
