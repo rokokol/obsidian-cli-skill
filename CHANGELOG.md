@@ -4,8 +4,13 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 
 ## 2026-09-11
 
+### Added
+
+- the gate holds every Obsidian CLI command and parameter the docs spell — `obsidian-cli NAME …` in a span or a fenced line, and a span opening with a real command — to what the CLI's own `help` declares, through the [ci](https://github.com/rokokol/ci-skill) skill's `check-interface.sh`, vendored. `obsi.sh` passes unknown words through, so `check-sh.sh` could never tell a real command from a ghost. The CLI is not on a runner, so the gate reads `tests/obsidian-help.txt`, the help 1.13.7 answered, and holds it to the live help when `OBSIDIAN_CLI` names the client. The two typos the docs show on purpose, `fil=` and `format=` on `aliases`, carry `check-interface: allow`
+
 ### Changed
 
+- `references/obsi.md` no longer counts the related-notes signals beside the table that lists them
 - `obsi.sh` dispatches on `cmd="$1"` in the family's canonical shape, says its exit codes in its header — 0, 1 when the CLI or the vault answered with an error, 2 on a usage error — and is held to that header by the [bash-best-practices](https://github.com/rokokol/bash-best-practices-skill) skill's `check-sh.sh`, vendored: its subcommands, flags and codes in the help, and every `obsi.sh …` in `SKILL.md` and `README.md` a real one, where a passed-through CLI command counts as real because the `*)` arm forwards rather than refuses. The readme names `obsi.sh find`, `obsi.sh graph` and `obsi.sh selftest`, which it never had
 - the rule behind closing stdin on every call inside a loop is that skill's now; `references/pitfalls.md` keeps the measurement and points there
 

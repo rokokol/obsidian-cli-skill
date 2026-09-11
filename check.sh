@@ -18,7 +18,7 @@ cd "$HERE"
 
 # One source of truth for what gets linted. A second copy of this list drifts, and a
 # drifted list lies about what was checked.
-scripts=(check.sh check-sh.sh check-skill.sh check-pins.sh check-changelog.sh vendor-sync.sh check-obsi.sh obsi.sh tests/stub-cli.sh)
+scripts=(check.sh check-sh.sh check-skill.sh check-pins.sh check-changelog.sh check-interface.sh vendor-sync.sh check-obsi.sh obsi.sh tests/stub-cli.sh)
 skill_name=obsidian-cli
 
 fail() {
@@ -64,6 +64,35 @@ echo "== the wrapper's help and these documents agree with its dispatcher"
 # CLI, any command at all, which the checker allows once it sees the *) arm forward
 # rather than refuse. It plants its own defects on every run
 ./check-sh.sh -d SKILL.md -d README.md obsi.sh
+
+echo "== what these documents say about the Obsidian CLI is what its own help declares"
+# obsi.sh passes unknown words through, so check-sh.sh cannot tell a real CLI command from a
+# ghost; the CLI's own help can. The app is not on a runner, so the gate reads
+# tests/obsidian-help.txt, the help one version answered, recorded with that version on its
+# first line. With OBSIDIAN_CLI set to the client's binary the recording is first held to the
+# live help, so the day the app moves the gate says the recording is stale
+if [[ -n "${OBSIDIAN_CLI:-}" ]]; then
+  diff <(sed 1d tests/obsidian-help.txt) <("$OBSIDIAN_CLI" help 2>/dev/null) >"$work/help.diff" ||
+    fail "tests/obsidian-help.txt is not what $OBSIDIAN_CLI help answers now; regenerate it:"$'\n'"  { printf '# obsidian %s — …\n' \"\$($OBSIDIAN_CLI version)\"; $OBSIDIAN_CLI help; } >tests/obsidian-help.txt"$'\n'"$(head -n 20 "$work/help.diff")"
+else
+  echo "   against the recording of $(head -n 1 tests/obsidian-help.txt | cut -d' ' -f2-5); set OBSIDIAN_CLI to hold it to a live app"
+fi
+# The help's shape: `vault=` under Options is every command's, a command sits at two spaces
+# under Commands, and its parameters at four, `file=<name>` or a bare flag such as `total`
+awk '/^Options:/ { opt = 1; next }
+  /^Commands:/ { opt = 0; cmds = 1; next }
+  opt && /^  [a-z]+=/ { split($1, a, "="); print "*", a[1]; next }
+  !cmds { next }
+  /^  [a-z][a-z0-9:.-]*( |$)/ { cmd = $1; print cmd; next }
+  cmd && /^    [^ ]/ { p = $1; sub(/=.*/, "", p); print cmd, p }' tests/obsidian-help.txt | sort -u >"$work/declared.txt"
+# A parser that stopped matching the parameter lines would leave commands with no arguments,
+# and every `key=` a document spells would then be a finding — but a list with only names
+# must not be mistaken for the CLI either
+grep -q '^[a-z][^ ]* [a-z<]' "$work/declared.txt" || fail "no parameter was read from tests/obsidian-help.txt — its shape moved"
+# The ci skill's check-interface.sh, vendored: `obsidian-cli NAME …` in a span or a fenced
+# line, and a span opening with a declared command, are held to the list, and it plants its
+# own defects on every run. A typo shown on purpose carries `check-interface: allow`
+./check-interface.sh -d "$work/declared.txt" -p 'obsidian-cli ' -b -f SKILL.md README.md references/*.md
 
 echo "== the wrapper's shell half behaves, against a fake CLI"
 # The shell half against the stub, and the JavaScript the wrapper builds for find, graph

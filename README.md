@@ -107,4 +107,6 @@ nix develop -c ./check.sh
 
 Lints the shell, checks that `SKILL.md` still carries the frontmatter an agent loads it by, and resolves every relative link and heading anchor in the docs — then proves each of those checks able to go red, against throwaway copies of the repository with one planted defect each. A check that has never failed is a decoration
 
+Every Obsidian CLI command and parameter the docs spell is held to what the CLI's own `help` declares, by the [ci](https://github.com/rokokol/ci-skill) skill's `check-interface.sh`. No runner has the app, so the gate reads `tests/obsidian-help.txt`, the help one version answered; run it as `OBSIDIAN_CLI=obsidian-cli nix develop -c ./check.sh` with the app open and the recording is first compared with the live help, so the day Obsidian renames something the gate says the recording is stale
+
 The behavioural claims cannot be gated in CI, because they need a running Obsidian with a real vault. They carry their measurements instead, which is what makes them falsifiable by anyone with an app open

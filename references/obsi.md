@@ -118,7 +118,7 @@ Attachments are counted but left out of the walk: an image linked from forty not
 
 ### `related` — connected without an edge
 
-Direct neighbours are left out on purpose: `links` and `backlinks` answer those already, and what is wanted here is a connection the vault holds without a link to show for it. Three signals, weighted by how much each one actually says:
+Direct neighbours are left out on purpose: `links` and `backlinks` answer those already, and what is wanted here is a connection the vault holds without a link to show for it. The signals, weighted by how much each one actually says:
 
 | Signal | Worth | What it means |
 | --- | --- | --- |

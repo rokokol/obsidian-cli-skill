@@ -8,3 +8,4 @@ check-skill.sh rokokol/ci-skill templates/check-skill.sh 42d8ed275977a210e5de961
 check-changelog.sh rokokol/versioning-skill check-changelog.sh b197670ddf1e7ec9a17960ca3e9d823efb4f2921 4be313991ed7928eb4c81f8f697a3d375ad50b82
 .github/workflows/vendor-sync.yml rokokol/ci-skill templates/github/workflows/vendor-sync.yml d55020ab3ca780ea6299336d923b8a3fcb8f491d a5bde77f98d55a43b2c993f4c96a952e0b68010d manual
 check-sh.sh rokokol/bash-best-practices-skill check-sh.sh e3211f2cf47a36ed3b6d9a044954ecb101f2542a 550127ffa6570eb702d86be372bd7666aa183605
+check-interface.sh rokokol/ci-skill templates/check-interface.sh e3b34f0104278c1adb9aad87073740e6f9b70dc8 2806507f610b4ffb72b0c06f39fcdd50a095e43d

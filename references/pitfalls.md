@@ -23,7 +23,7 @@ Unknown flags and parameter names are dropped without a word. A command that no 
 ```console
 $ obsidian-cli backlinks file=Garden total
 12
-$ obsidian-cli backlinks fil=Garden total
+$ obsidian-cli backlinks fil=Garden total  # check-interface: allow, the typo is the point
 5
 ```
 
