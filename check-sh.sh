@@ -6,15 +6,17 @@
 # in both directions. Each check is proven able to fail on every run, on a canonical
 # script with one defect planted, so a copy of this file falsifies itself wherever it runs.
 #
-#   check-sh.sh [-n NAME] [-e PREFIX] [-d DOC]... [-c BASH ZSH] SCRIPT
+#   check-sh.sh [-n NAME] [-e PREFIX] [-d DOC]... [-m DOC]... [-c BASH ZSH] SCRIPT
 #   check-sh.sh --template [script|bash|zsh]
 #
 #   -n NAME      what the help, the docs and the completions call the script (default:
 #                the script's basename)
 #   -e PREFIX    the script reads environment variables with this prefix; each must be
 #                in the help
-#   -d DOC       a document that names the script's subcommands and flags, checked both
-#                ways; repeatable
+#   -d DOC       a document that lists the script's subcommands, checked both ways: every
+#                subcommand named, and every `NAME word` it spells real; repeatable
+#   -m DOC       a document that mentions only some of them and sends the reader to the
+#                help for the rest: every `NAME word` it spells must be real; repeatable
 #   -c BASH ZSH  the two completion files, checked both ways
 #   --template   print the canonical script, or its bash or zsh completion, and exit
 #
@@ -206,6 +208,7 @@ EOF
 name=""
 prefix=""
 docs=()
+mentions=()
 comp_bash=""
 comp_zsh=""
 script=""
@@ -224,6 +227,11 @@ while (($#)); do
     -d)
       (($# >= 2)) || die "-d needs a document"
       docs+=("$2")
+      shift 2
+      ;;
+    -m)
+      (($# >= 2)) || die "-m needs a document"
+      mentions+=("$2")
       shift 2
       ;;
     -c)
@@ -262,7 +270,7 @@ done
 }
 [[ -r "$script" ]] || die "cannot read $script"
 [[ -n "$name" ]] || name=$(basename -- "$script")
-for f in "${docs[@]+"${docs[@]}"}" "$comp_bash" "$comp_zsh"; do
+for f in "${docs[@]+"${docs[@]}"}" "${mentions[@]+"${mentions[@]}"}" "$comp_bash" "$comp_zsh"; do
   [[ -z "$f" || -r "$f" ]] || die "cannot read $f"
 done
 
@@ -318,6 +326,7 @@ has_token() { # has_token TOKEN <<<TEXT -> 0 when TEXT holds TOKEN as a whole to
 subs=()
 flags=() # "SUB<TAB>FLAG" per line, SUB is - for a global flag
 open_set=0
+proxy_only=0
 {
   header=$(sed -n '2,/^[^#]/p' "$script" | sed '$d')
   claims_32=0
@@ -370,8 +379,14 @@ open_set=0
       }
       for (i = 1; i <= n; i++) print owner "\t" parts[i]
     }' "$code")
-  ((${#subs[@]} + ${#flags[@]} > 0)) ||
-    die "nothing to check in $script: no case \"\$cmd\" dispatcher and no flag arms — see references/shape.md"
+  # A plain script with no dispatcher and no flag has no help for anything to agree with.
+  # If its header claims bash 3.2 the proxy below is still worth running, and it is all
+  # that runs; with no claim either there is nothing to check, which is a refusal
+  if ((${#subs[@]} + ${#flags[@]} == 0)); then
+    ((claims_32)) ||
+      die "nothing to check in $script: no case \"\$cmd\" dispatcher, no flag arms and no bash 3.2 claim — see references/shape.md"
+    proxy_only=1
+  fi
   # The help arm is spelled one way, so a reader and a completion can count on all three.
   # A wrapper passes `help` through to the tool behind it, whose help is the better one,
   # so it may answer -h and --help as flags before the dispatcher instead
@@ -419,7 +434,7 @@ if ((claims_32)); then
 fi
 
 # ---- the help ---------------------------------------------------------------------
-{
+if ((! proxy_only)); then
   # Run under the bash running this checker, not the one the shebang finds: on a macOS
   # runner that is the 3.2 the claim is about
   help=$("$BASH" "$script" --help 2>&1) || die "$name --help exited $? rather than printing the help:"$'\n'"$help"
@@ -503,17 +518,17 @@ fi
       finding "$name exits $n but its help never lists $n on an Exit line"
   done < <(grep -vE '^[[:space:]]*#' "$code" |
     grep -oE '(^|[;{(&|[:space:]])exit [1-9][0-9]*[[:space:]]*(;|&&|\|\||$)' | grep -oE '[0-9]+' | sort -u)
-}
+fi
 
 # ---- the documents ----------------------------------------------------------------
-# Forward: every subcommand is named beside the script's name somewhere in the document.
-# Back: every `NAME word` the document spells is a subcommand, and every flag it attaches
-# to one is parsed by it. The reverse direction is the sharp one — a document naming a
-# subcommand that no longer exists is what this exists to catch
-for doc in "${docs[@]+"${docs[@]}"}"; do
-  for s in "${subs[@]+"${subs[@]}"}"; do
-    grep -F -- "$name" "$doc" | has_token "$s" || finding "$doc never names $name $s"
-  done
+# Back, for every document: each `NAME word` it spells is a subcommand, and each flag it
+# attaches to one is parsed by it. This is the sharp direction — a document naming a
+# subcommand that no longer exists is what the check exists to catch. Forward, only for
+# a document given with -d, one that sets out to list them: every subcommand is named
+# beside the script's name somewhere in it. A document given with -m mentions a few and
+# sends the reader to the help for the rest, which is the help doing its job
+doc_mentions_are_real() { # doc_mentions_are_real DOC -> a finding per mention that is not
+  local doc="$1" span sub flag
   while IFS= read -r span; do
     [[ -n "$span" ]] || continue
     # shellcheck disable=SC2086 # the span is split into its words on purpose
@@ -537,6 +552,15 @@ for doc in "${docs[@]+"${docs[@]}"}"; do
       shift
     done
   done < <(grep -oE "\`${name_re}( [^\`]*)?\`" "$doc" | tr -d '`' | sort -u)
+}
+for doc in "${docs[@]+"${docs[@]}"}"; do
+  for s in "${subs[@]+"${subs[@]}"}"; do
+    grep -F -- "$name" "$doc" | has_token "$s" || finding "$doc never names $name $s"
+  done
+  doc_mentions_are_real "$doc"
+done
+for doc in "${mentions[@]+"${mentions[@]}"}"; do
+  doc_mentions_are_real "$doc"
 done
 
 # ---- the completions --------------------------------------------------------------
@@ -645,6 +669,14 @@ out=$(nested "$c" "$c/script.sh" 2>&1) || status=$?
 case "$out" in *"nothing to check"*) ;; *) die "self-test: a script with nothing to check was refused for the wrong reason: $out" ;; esac
 planted=$((planted + 1))
 
+c=$(copy plain-claimed)
+# A plain script with no dispatcher and no flag, whose header claims bash 3.2, is checked
+# by the proxy alone: clean it passes, with a bash 4 construct it goes red
+printf '#!/usr/bin/env bash\n# Needs bash 3.2 and POSIX tools only.\necho hi\n' >"$c/plain.sh"
+nested "$c" "$c/plain.sh" >/dev/null 2>&1 || die "self-test: a plain script claiming bash 3.2 was refused rather than checked by the proxy"
+printf 'false && declar''e -A m\n' >>"$c/plain.sh"
+expect_red "$c" "claims bash 3.2 but $c/plain.sh:" "a bash 4 construct in a plain script claiming 3.2" "$c/plain.sh"
+
 c=$(copy helper-case)
 # A case inside a helper function is not a parser of this script's flags
 # shellcheck disable=SC2016 # the $1 belongs to the helper being written out
@@ -739,6 +771,19 @@ c=$(copy doc-ghost-flag)
 printf '\nAnd `script.sh run --ghost` for the flag that is not there\n' >>"$c/README.md"
 expect_red "$c" "gives \`script.sh run\` the flag --ghost, which it does not parse" "a document attaching a flag that is not parsed" -n script.sh -d "$c/README.md" "$c/script.sh"
 
+c=$(copy mention-partial)
+# A document that mentions one subcommand and sends the reader to the help for the rest
+# is not held to naming them all
+# shellcheck disable=SC2016 # the backticks are markdown, not a command substitution
+printf 'Run `script.sh stop` to stop it; `script.sh help` has the rest\n' >"$c/NOTE.md"
+nested "$c" -n script.sh -m "$c/NOTE.md" "$c/script.sh" >/dev/null 2>&1 ||
+  die "self-test: a document given with -m was held to naming every subcommand"
+
+c=$(copy mention-ghost)
+# shellcheck disable=SC2016 # the backticks are markdown, not a command substitution
+printf 'Run `script.sh ghost` to stop it\n' >"$c/NOTE.md"
+expect_red "$c" "NOTE.md names \`script.sh ghost\`, which script.sh does not have" "a mention of a subcommand that is not there" -n script.sh -m "$c/NOTE.md" "$c/script.sh"
+
 c=$(copy comp-bash-missing)
 sed 's/--dry-run//' "$canon/script.sh.bash" >"$c/script.sh.bash"
 expect_red "$c" "--dry-run is parsed by script.sh but absent from $c/script.sh.bash" "a bash completion missing a flag" -n script.sh -c "$c/script.sh.bash" "$c/_script.sh" "$c/script.sh"
@@ -761,4 +806,4 @@ plant "$c" 'HERE=' 'x=$(mktem'"p -d -p /tmp)"
 expect_red "$c" "has: x=\$(mktem""p -d -p /tmp)" "a GNU mktemp flag under a 3.2 claim" -n script.sh "$c/script.sh"
 
 printf 'check-sh: %s — %d subcommands, %d flags agree with the help; %d document(s), %s completions checked; %d planted defects caught\n' \
-  "$name" "${#subs[@]}" "${#flags[@]}" "${#docs[@]}" "$([[ -n "$comp_bash" ]] && echo 2 || echo 0)" "$planted"
+  "$name" "${#subs[@]}" "${#flags[@]}" "$((${#docs[@]} + ${#mentions[@]}))" "$([[ -n "$comp_bash" ]] && echo 2 || echo 0)" "$planted"
