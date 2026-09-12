@@ -67,7 +67,7 @@ Columns are **score**, **why it matched** (several joined by `+`), **path**, and
 | heading | — | 3 |
 | text — anything `search` matched, frontmatter included | — | 1 |
 
-Each field counts once, at its best match, and the fields add up, so a note matching by alias and in its text outranks one that only appears in the text — but four matching headings no longer outrank an exact filename, which they did while scores were summed inside a field. They are deliberately coarse: the ranking is a convenience, the **reason column is the point**, because it makes a wrong hit visible instead of plausible
+Each field counts once, at its best match, and the fields add up, so a note matching by alias and in its text outranks one that only appears in the text, while four matching headings do not outrank an exact filename. They are deliberately coarse: the ranking is a convenience, the **reason column is the point**, because it makes a wrong hit visible instead of plausible
 
 Where the ranking stops meaning anything is a marker that scores every hit identically. A common tag is the case that bites: 649 notes carry the same one on the vault measured, all at 4 points, and the order among them is alphabetical, which is to say arbitrary. So the cut is announced rather than made in silence — `find` prints what it dropped, and a search that answers "these are the notes with that tag" from twenty rows out of 649 is wrong in a way nothing else would have shown:
 
