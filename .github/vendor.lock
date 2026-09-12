@@ -7,5 +7,5 @@ check-pins.sh rokokol/ci-skill templates/check-pins.sh 42d8ed275977a210e5de961a6
 check-skill.sh rokokol/ci-skill templates/check-skill.sh 42d8ed275977a210e5de961a677a476decfaedaa 98f086224ffc3e9717925589d48e6f3827fb0adb
 check-changelog.sh rokokol/versioning-skill check-changelog.sh b197670ddf1e7ec9a17960ca3e9d823efb4f2921 4be313991ed7928eb4c81f8f697a3d375ad50b82
 .github/workflows/vendor-sync.yml rokokol/ci-skill templates/github/workflows/vendor-sync.yml d55020ab3ca780ea6299336d923b8a3fcb8f491d a5bde77f98d55a43b2c993f4c96a952e0b68010d manual
-check-sh.sh rokokol/bash-best-practices-skill check-sh.sh e3211f2cf47a36ed3b6d9a044954ecb101f2542a 550127ffa6570eb702d86be372bd7666aa183605
-check-interface.sh rokokol/ci-skill templates/check-interface.sh e3b34f0104278c1adb9aad87073740e6f9b70dc8 2806507f610b4ffb72b0c06f39fcdd50a095e43d
+check-sh.sh rokokol/bash-best-practices-skill check-sh.sh 7a00a5e76ff757985a95e8fd2167209365148c6e 4aa097877170f5fa05aab6748fe3b076d86615ea
+check-interface.sh rokokol/ci-skill templates/check-interface.sh ead188682e6ec6e014eb8d9b80ab1d4c62e4dfbd 75c6f3fcf8c15906a6169ec49bcf0e243e47db69

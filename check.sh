@@ -77,22 +77,36 @@ if [[ -n "${OBSIDIAN_CLI:-}" ]]; then
 else
   echo "   against the recording of $(head -n 1 tests/obsidian-help.txt | cut -d' ' -f2-5); set OBSIDIAN_CLI to hold it to a live app"
 fi
-# The help's shape: `vault=` under Options is every command's, a command sits at two spaces
-# under Commands, and its parameters at four, `file=<name>` or a bare flag such as `total`
-awk '/^Options:/ { opt = 1; next }
-  /^Commands:/ { opt = 0; cmds = 1; next }
-  opt && /^  [a-z]+=/ { split($1, a, "="); print "*", a[1]; next }
-  !cmds { next }
-  /^  [a-z][a-z0-9:.-]*( |$)/ { cmd = $1; print cmd; next }
-  cmd && /^    [^ ]/ { p = $1; sub(/=.*/, "", p); print cmd, p }' tests/obsidian-help.txt | sort -u >"$work/declared.txt"
+declared_of() { # declared_of [FILE] -> the "command" and "command parameter" lines a help declares
+  # The help's shape: `vault=` under Options is every command's, a command sits at two
+  # spaces under Commands, and its parameters at four, `file=<name>` or a flag like `total`
+  awk '/^Options:/ { opt = 1; next }
+    /^Commands:/ { opt = 0; cmds = 1; next }
+    opt && /^  [a-z]+=/ { split($1, a, "="); print "*", a[1]; next }
+    !cmds { next }
+    /^  [a-z][a-z0-9:.-]*( |$)/ { cmd = $1; print cmd; next }
+    cmd && /^    [^ ]/ { p = $1; sub(/=.*/, "", p); print cmd, p }' "${1:--}" | sort -u
+}
+declared_of tests/obsidian-help.txt >"$work/declared.txt"
+# Every command an earlier recording declared: one the current recording has dropped was
+# renamed or removed, and a bare span still naming it would otherwise pass as prose. The
+# recordings are this file's own history, so the gate needs all of it, which the build
+# workflow checks out; a shallow clone would show only the current one and prove nothing
+[[ "$(git rev-parse --is-shallow-repository)" == false ]] ||
+  fail "this clone is shallow, so the earlier recordings of tests/obsidian-help.txt are out of reach; fetch the whole history"
+git log --format=%H -- tests/obsidian-help.txt | while read -r rev; do
+  git show "$rev:tests/obsidian-help.txt" | declared_of
+done | cut -d' ' -f1 | sort -u >"$work/was.txt"
+[[ -s "$work/was.txt" ]] || fail "no earlier recording of tests/obsidian-help.txt was read — its history is missing"
 # A parser that stopped matching the parameter lines would leave commands with no arguments,
 # and every `key=` a document spells would then be a finding — but a list with only names
 # must not be mistaken for the CLI either
 grep -q '^[a-z][^ ]* [a-z<]' "$work/declared.txt" || fail "no parameter was read from tests/obsidian-help.txt — its shape moved"
 # The ci skill's check-interface.sh, vendored: `obsidian-cli NAME …` in a span or a fenced
 # line, and a span opening with a declared command, are held to the list, and it plants its
-# own defects on every run. A typo shown on purpose carries `check-interface: allow`
-./check-interface.sh -d "$work/declared.txt" -p 'obsidian-cli ' -b -f SKILL.md README.md references/*.md
+# own defects on every run. A typo shown on purpose carries `check-interface: allow`, and
+# -r makes a command the recordings once had and the current one lacks a finding anywhere
+./check-interface.sh -d "$work/declared.txt" -r "$work/was.txt" -p 'obsidian-cli ' -b -f SKILL.md README.md references/*.md
 
 echo "== the wrapper's shell half behaves, against a fake CLI"
 # The shell half against the stub, and the JavaScript the wrapper builds for find, graph

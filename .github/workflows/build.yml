@@ -24,9 +24,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # The whole history: the gate reads every earlier recording of tests/obsidian-help.txt,
+      # so a command the CLI stopped declaring is caught wherever the docs still name it
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
+          fetch-depth: 0
       - uses: cachix/install-nix-action@v31
       - name: check.sh (the gate, self-tested against known-bad fixtures)
         run: nix develop --no-write-lock-file -c ./check.sh

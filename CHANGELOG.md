@@ -2,6 +2,12 @@
 
 Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dated rather than numbered, and with no `Unreleased` section — this repository is read at whatever revision you have checked out, so whatever is on the default branch is what every reader already has
 
+## 2026-09-12
+
+### Added
+
+- a command the Obsidian CLI stops declaring is a finding wherever the docs still name it, a bare span included. Such a span is otherwise taken for prose, since a hundred-odd spans here open with words that were never commands, so a renamed command went unnoticed there. The gate reads every earlier recording of `tests/obsidian-help.txt` from its git history and passes the commands they declared to `check-interface.sh -r`; the build workflow checks out the whole history for it, and a shallow clone is refused rather than passed
+
 ## 2026-09-11
 
 ### Added
