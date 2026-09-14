@@ -79,7 +79,7 @@ $ ./obsi.sh --vault Vault find "lecture-notes" --tag --limit 3
 …	646 more matches at or below this score, raise --limit to see them
 ```
 
-Announcing it is harder than it looks, and the first attempt printed nothing. `head` stops reading at its count, the shell builtin feeding it takes SIGPIPE, and under `set -o pipefail` the wrapper died at **141** on that line — after the rows had already appeared, so it read as a finished command. Note that this is a shell trap, not a CLI one: `obsidian-cli files | head -n 3` leaves `PIPESTATUS` at 0 even at 572 KB of output, because the client is Node and swallows EPIPE. `awk 'NR <= n'` reads to the end and leaves the status alone
+`head` is wrong for this bound: it stops reading at its count, the shell builtin feeding it takes SIGPIPE, and under `set -o pipefail` the wrapper dies at **141** after the rows have already appeared. This is a shell trap, not a CLI one: `obsidian-cli files | head -n 3` leaves `PIPESTATUS` at 0 even at 572 KB of output because the client is Node and swallows EPIPE. `awk 'NR <= n'` reads to the end and leaves the status alone
 
 Every tag a note carries is matched, in both places Obsidian keeps them: `cache.tags` for inline ones and `frontmatter.tags` for the rest — 5979 frontmatter tags against 16 inline on that vault, so a tag search that only read the inline ones would have found almost nothing. `tags` and `aliases` are read the way Obsidian reads them: a string is one item and is never split on commas, a list is taken item by item, and a tag holding a space is no tag at all — so `tags: a, b` carries no tags, as in Obsidian's own tag pane
 
@@ -169,7 +169,7 @@ On a vault whose cut-off notes are all single, the two nearly collapse into each
 
 ### Why every component is listed, including the largest
 
-An earlier version of this query was called `islands` and dropped the biggest component before printing, on the assumption that it is the mainland and only what is cut off from it is interesting. That assumption is not in the data. A vault that has split into halves of 600 and 600 would have had one half silently reported as an island, with nothing in the output admitting a choice had been made
+Do not drop the biggest component as an assumed mainland: that judgement is not in the data. A vault split into halves of 600 and 600 has no uniquely distinguished mainland
 
 So the mainland is row one, its size is visible, and everything cut off from it is every row after — the same information, with the judgement left to the reader. Both dimensions are bounded because a component is a listing like any other: a hundred paths joined onto one line is exactly the runaway output the third rule exists to stop. The default output is 719 bytes on a 1300-note vault
 
@@ -181,7 +181,7 @@ It is Obsidian's index, so it carries that index's blind spots, and every one of
 
 `find` and `graph related` read `tags` and `aliases` through a copy of Obsidian's own parsers, because the module that exports them cannot be required from `eval`, and a copy drifts when Obsidian changes. The one answer from Obsidian's own reading that `eval` can reach is `metadataCache.getTags()`, the tag counts the tag pane shows. `obsi.sh selftest` sums the same counts from what the wrapper reads, under `getTags`' own counting rules — excluded files skipped, every occurrence counted, a nested tag counted toward each parent, a tag Obsidian's tag check refuses counted for nothing, one tag in two cases counted once — and prints `tags agree with Obsidian's own count (N tags)`, or every tag whose count differs as tag, ours, Obsidian's, and exits 1
 
-Measured on 1.13.7: 2 tags agree on the sandbox vault and 401 on a vault of 1299 notes. Before the refusal rule was added, the one tag that differed was a template placeholder, `#y{{date:YYYY}}`, which the wrapper reads as a tag the way Obsidian's per-file reading does, and which Obsidian's own count refuses. A difference after an update means the copy or the counting rules no longer match the running Obsidian: read the named tags before trusting `find --tag`
+Measured on 1.13.7: 2 tags agree on the sandbox vault and 401 on a vault of 1299 notes. Template placeholders such as `#y{{date:YYYY}}` are a boundary case because per-file reading can recognise one while Obsidian's own aggregate count refuses it. A difference after an update means the copy or the counting rules no longer match the running Obsidian: read the named tags before trusting `find --tag`
 
 The JavaScript that `find`, `graph related` and `selftest` hand to `eval` is run in node against a made-up vault in `tests/fake-app.js`, taken from the wrapper exactly as it builds it. How it behaves against a real vault's index is still measured, not tested
 

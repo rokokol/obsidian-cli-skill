@@ -55,7 +55,7 @@ Created: Notes/one.md
 
 The suggestion changes with the command but its shape does not: the registry is not populated yet, so the fuzzy match reaches for whatever few commands are already in it. Seen four times across a session, on `create` and on `aliases` alike, and reproduced deliberately
 
-It matters more than it looks, because it arrives as an application error — **stdout, exit 0** — so a script that creates a batch of notes takes it for success and silently skips the first one. It cost exactly that here: a repro built three notes, the first was never written, and the result looked plausible enough to reason about before the gap was noticed. Fire one cheap call, ignore its answer, then start
+It arrives as an application error — **stdout, exit 0** — so a script that creates a batch of notes can take it for success and silently skip the first one. Fire one cheap call, ignore its answer, then start
 
 ### The CLI reads stdin, so a `while read` loop runs once
 
@@ -76,7 +76,7 @@ $ while IFS= read -r f; do obsidian-cli links path="$f" </dev/null; done < list 
 7161
 ```
 
-The general rule — every call inside a loop that reads a pipe gets `</dev/null`, `xargs` and `find -exec` included — is the [bash-best-practices](https://github.com/rokokol/bash-best-practices-skill) skill's, in its `references/pitfalls.md`, with this measurement as its evidence
+Every call inside a loop that reads a pipe gets `</dev/null`, including calls launched through `xargs` or `find -exec`
 
 ## The link graph is Obsidian's, not the file's
 
@@ -154,7 +154,7 @@ $ head -3 note.md
 tags: alpha, beta
 ```
 
-With `type=list` the same call writes a proper block sequence. **This corrects an earlier reading of this pitfall**: `property:set` is not incapable of writing YAML lists — it writes one correctly when told the type, and corrupts one when not told
+With `type=list` the same call writes a proper block sequence. `property:set` writes lists correctly when told the type and corrupts an existing list when not told
 
 ### With `type=list` the comma cannot be escaped
 

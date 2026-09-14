@@ -159,7 +159,7 @@ obsidian-cli eval code='(async()=>{const f=app.vault.getAbstractFileByPath("note
 
 `await` inside an async IIFE is resolved before printing. Useful entry points: `app.vault`, `app.metadataCache.resolvedLinks`, `app.metadataCache.unresolvedLinks`, `app.metadataCache.getCache(path)`, `app.fileManager.processFrontMatter`
 
-The code does not have to be one line — a multi-line function body passed as a single shell argument runs fine, and a string returned with newlines in it prints as several lines, with `=> ` on the first only. **This corrects an earlier reading**, which said to keep it on one line; the constraint was the shell's quoting, never the CLI's
+The code does not have to be one line: a multi-line function body passed as a single shell argument runs fine, and a string returned with newlines in it prints as several lines, with `=> ` on the first only. The constraint is the shell's quoting, not the CLI
 
 What the code logs is printed too, above the result: `console.log("side-channel")` inside the code shows as a `side-channel` line before `=> value`. A script parsing `eval` takes the line that starts with `=> `, not the first line — which only matters once the code, or a plugin it calls into, logs anything
 

@@ -6,7 +6,7 @@ license: MIT
 
 # Obsidian CLI
 
-The official CLI ships with Obsidian 1.12+. It is a thin client that talks to a **running** Obsidian app over a unix socket — not a standalone vault reader. Everything it reports comes from the app's own index, so it sees the vault exactly as Obsidian does
+The official CLI ships with Obsidian 1.12+. It is a thin client that talks to a **running** Obsidian app over local IPC — not a standalone vault reader. Everything it reports comes from the app's own index, so it sees the vault exactly as Obsidian does
 
 Written against Obsidian **1.13.7 (installer 1.13.4)** on Linux. Behaviour below was measured, not copied from the help text
 
@@ -22,7 +22,7 @@ These cost one line each and are the difference between a real answer and a plau
 
 1. **Read the output, not the exit status.** Every application-level error — missing file, unknown command, missing parameter — prints `Error: …` and still exits **0**, on **stdout**. `set -e`, `if cmd; then`, and `2>/dev/null` all fail to notice. Check for the `Error: ` prefix
 2. **Always pass a target.** Unknown parameters and flags are ignored in silence, so one typo turns a targeted query into a query about whichever file is open in the GUI: `backlinks fil=Garden total` answered `5` where `file=` answers `12`. Nothing warns. Prefer `path=` (exact, from the vault root) over `file=` (wikilink-style name resolution) whenever the path is known <!-- check-interface: allow — fil= is the typo shown on purpose -->
-3. **Bound every listing.** These commands stream the whole vault. `search:context` for a common word returned **98 MB** in one call here. Put `limit=` on searches, `total` on counts, and pipe long listings through `grep`/`head` rather than reading them whole
+3. **Bound every listing.** These commands stream the whole vault. `search:context` for a common word returned **98 MB** in one call here. Put `limit=` on searches and `total` on counts. When a command has no native bound, capture its output, reject an `Error: ` line, and only then inspect a bounded part; a truncating pipeline can hide the call's result
 4. **Close stdin on every call in a loop.** The CLI reads stdin, so `while IFS= read -r f; do <cli> links path="$f"; done < list` consumes the list on its first call and ends after one file, silently and 500 times too fast. Add `</dev/null` to the inner call
 
 ## Task to command
@@ -84,6 +84,4 @@ Prefer the CLI over editing files directly: it goes through the app, so the inde
 - [`references/obsi.md`](references/obsi.md) — the wrapper in full: every `find` and `graph` flag, how results are scored, and what each query cannot see
 - [`references/plugin-dev.md`](references/plugin-dev.md) — the reload, errors, console and inspect loop for a plugin or theme, with what `help` leaves out
 
-This skill covers the CLI only. How a particular vault's notes are written and organised — style, indexes, icons, diagrams, its own tooling — is set somewhere else, if it is set at all: most often by skills the vault carries itself, one per concern. Do not assume those rules exist, and do not invent them where they do not
-
-Where such a skill lives depends on the agent — whichever skills directory it reads, under the vault, which for Claude Code is `<vault>/.claude/skills/`. The harness offers them only to a session started under the vault, so from anywhere else they are absent from the skill list while existing on disk. Before writing into a vault, look in that directory and read the relevant `SKILL.md` and the files it points to by path. A skill missing from the list means it was not offered to this session, never that it does not exist
+This skill covers the CLI only. How a particular vault's notes are written and organised — style, indexes, icons, diagrams, its own tooling — is set by the vault's own instructions, when they exist. Before writing, inspect both the instructions the harness offered and the vault-local instruction directories it uses; a policy absent from the loaded list may still exist on disk. Do not invent vault rules where none exist
