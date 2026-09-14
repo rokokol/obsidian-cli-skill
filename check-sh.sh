@@ -472,9 +472,17 @@ known_flag() { # known_flag FLAG [SUB] -> 0 when SUB (or any parser) accepts it,
 if ((claims_32)); then
   bash4='\[\[[^]]*[-]v [A-Za-z_]|mapfil[e] |readarra[y] |declar[e] -A|loca[l] -A|declar[e] -n|loca[l] -n'
   bash4="$bash4"'|\$\{[A-Za-z_]+,[,]\}|\$\{[A-Za-z_]+\^[\^]\}|\$\{[A-Za-z_]+@[QEPAaKk]\}|;;[&]|[^|]\|[&][^&]|wai[t] -n'
+  # A negative length, a descriptor named by a variable, a fractional read timeout, globstar
+  bash4="$bash4"'|\$\{[A-Za-z_][A-Za-z0-9_]*:[^}:]*:[-][0-9]|(^|[^$])[{][A-Za-z_][A-Za-z0-9_]*[}][<>]|rea[d] [^;|&]*-t ?[0-9]*[.][0-9]|globsta[r]'
+  # Parsed by both, read two ways: 3.2 keeps a quoted replacement's quotes, 5.2 reads & as
+  # the match
+  bash4="$bash4"'|\$\{[A-Za-z_][A-Za-z0-9_]*//?[^/}]*/["]|\$\{[A-Za-z_][A-Za-z0-9_]*//?[^/}]*/[^}]*[&]'
   # A bare `mktemp -d` is fine on macOS, whose page says it "behaves as if -t tmp was
   # supplied"; the GNU flags are not, and -t means a prefix there and a template here
   bsd='sor[t] -[A-Za-z]*V|gre[p] -[A-Za-z]*P|readlin[k] -f|dat[e] -d|mktem[p] (-[dqu]+ )*(-[pt]|--tmpdir|--suffix)'
+  # sed -i takes a suffix on BSD and none on GNU, so neither spelling runs on both
+  bsd="$bsd"'|se[d] (-[A-Za-z]+ )*-[A-Za-z]*i|se[d] [^|;]*--in-plac[e]|gre[p] [^|;]*--exclude-di[r]'
+  bsd="$bsd"'|(^|[^-A-Za-z0-9_{$])timeou[t] [0-9]|ta[r] [^|;]*--(wildcard[s]|nul[l])'
   while IFS= read -r hit; do
     [[ -n "$hit" ]] || continue
     finding "$name claims bash 3.2 but $script:$hit — a proxy grep; the proof is a run under 3.2"
