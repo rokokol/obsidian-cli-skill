@@ -485,6 +485,22 @@ want_status 2 "graph dump with two files"
 want_out "takes one file" "graph dump with two files"
 checks=$((checks + 1))
 
+# The rest of the graph queries refuse a word they do not take, the way path and dump do:
+# taken in silence, the word was dropped and the query answered as though it had not been
+# typed — the CLI's own habit, which this wrapper exists to stop
+for args in "graph summary extra" "graph hubs 5 extra" "graph ends 5 extra" "graph unresolved 5 extra" \
+  "graph components 3 3 extra" "graph related a.md 3 4"; do
+  read -ra words <<<"$args"
+  : >"$STUB_LOG"
+  run "${words[@]}"
+  want_status 2 "a word too many in '$args'"
+  want_out "obsi: " "a word too many in '$args'"
+  if grep -q 'code=' "$STUB_LOG"; then
+    fail "a word too many in '$args': the query reached the app before the word was refused"
+  fi
+  checks=$((checks + 1))
+done
+
 # No command at all is a usage error: the help on stderr, and exit 2
 run
 want_status 2 "no command at all"

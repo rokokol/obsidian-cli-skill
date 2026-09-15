@@ -579,20 +579,29 @@ graph() {
   local what="${1:-summary}"
   [[ $# -eq 0 ]] || shift
   case "$what" in
-    summary) answer graph_summary ;;
+    # Every query refuses a word it does not take: dropped in silence, it left an answer to a
+    # question other than the one typed, which is the CLI's habit this wrapper exists to stop
+    summary)
+      (($# == 0)) || usage_error "graph summary takes no arguments"
+      answer graph_summary
+      ;;
     hubs)
+      (($# <= 1)) || usage_error "graph hubs takes one row count"
       need_count "${1:-10}"
       answer graph_hubs "${1:-10}"
       ;;
     ends)
+      (($# <= 1)) || usage_error "graph ends takes one row count"
       need_count "${1:-10}"
       answer graph_ends "${1:-10}"
       ;;
     components)
+      (($# <= 2)) || usage_error "graph components takes a row count and a width"
       need_count "${1:-10}" "${2:-5}"
       answer graph_components "${1:-10}" "${2:-5}"
       ;;
     unresolved)
+      (($# <= 1)) || usage_error "graph unresolved takes one row count"
       need_count "${1:-40}"
       answer graph_unresolved "${1:-40}"
       ;;
@@ -601,6 +610,7 @@ graph() {
       related_note="$1"
       shift
       related_rows=10
+      related_rows_given=""
       related_tags=""
       while (($#)); do
         case "$1" in
@@ -614,7 +624,10 @@ graph() {
           # `--tags 0` into "show zero rows" without a word
           -*) usage_error "unknown option '$1' — graph related takes a row count and --tag-max-notes" ;;
           *)
+            [[ -z "$related_rows_given" ]] ||
+              usage_error "graph related takes one row count, not '$1' as well"
             related_rows="$1"
+            related_rows_given=1
             shift
             ;;
         esac

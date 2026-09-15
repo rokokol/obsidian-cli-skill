@@ -295,6 +295,60 @@ EOF
 
 # ---- graph arguments -----------------------------------------------------------------------
 
+defect 'arity/summary' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+(($# == 0)) || usage_error "graph summary takes no arguments"
+EOF
+  )" \
+  'true || usage_error "graph summary takes no arguments"' \
+  'a word after graph summary is dropped in silence, and the summary answers as though it had not been typed'
+
+defect 'arity/hubs' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+(($# <= 1)) || usage_error "graph hubs takes one row count"
+EOF
+  )" \
+  'true || usage_error "graph hubs takes one row count"' \
+  'graph hubs 5 10 answers for 5 and drops the 10 without a word'
+
+defect 'arity/ends' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+(($# <= 1)) || usage_error "graph ends takes one row count"
+EOF
+  )" \
+  'true || usage_error "graph ends takes one row count"' \
+  'a second word to graph ends is dropped in silence'
+
+defect 'arity/unresolved' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+(($# <= 1)) || usage_error "graph unresolved takes one row count"
+EOF
+  )" \
+  'true || usage_error "graph unresolved takes one row count"' \
+  'a second word to graph unresolved is dropped in silence'
+
+defect 'arity/components' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+(($# <= 2)) || usage_error "graph components takes a row count and a width"
+EOF
+  )" \
+  'true || usage_error "graph components takes a row count and a width"' \
+  'a third word to graph components is dropped in silence'
+
+defect 'arity/related-rows' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+[[ -z "$related_rows_given" ]] ||
+EOF
+  )" \
+  'true ||' \
+  'graph related a.md 3 4 answers with 4 rows and drops the 3 without a word'
+
 defect 'related/tag-max-shape' 'obsi.sh' \
   "$(
     cat <<'EOF'
