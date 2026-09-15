@@ -20,6 +20,7 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 
 - a refusal the Obsidian CLI prints for the query `obsi.sh` hands to the app no longer ends at exit 0, where `find` said No matches found and `graph dump` replaced an existing file with an empty one: it exits 1 with the CLI's message, like every other refusal
 - `obsi.sh graph summary`, `hubs`, `ends`, `unresolved`, `components` and `related` refuse a word they do not take, where they dropped it and answered as though it had not been typed
+- `check-obsi.sh` no longer hangs when its own stdin is neither a terminal nor at its end, such as a socket an agent's shell leaves open: its planted-defect pass ran each nested copy on that stdin, so with the stdin guard planted out the stub's `cat` waited on it for ever. Each nested run now reads `/dev/null`, and the read-loop check, which supplies its own stdin, is what catches the planted guard
 
 ## 2026-09-12
 

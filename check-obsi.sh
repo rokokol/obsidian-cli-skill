@@ -825,7 +825,10 @@ plant() { # plant NAME SED-EXPR -> a copy of obsi.sh with one edit applied
 # untested while the tally claimed otherwise
 expect_red() { # expect_red COPY WHAT FRAGMENT
   local copy="$1" what="$2" fragment="$3" nested_out nested_status
-  nested_out=$(CHECK_OBSI_NESTED=1 OBSI_UNDER_TEST="$copy" "$self" "$root" 2>&1)
+  # On /dev/null: the stub drains any stdin that is not a terminal, as the real client does,
+  # so a copy without the stdin guard would otherwise wait for ever on a stdin that never
+  # ends. The read-loop check supplies its own stdin, and it is what catches that copy
+  nested_out=$(CHECK_OBSI_NESTED=1 OBSI_UNDER_TEST="$copy" "$self" "$root" </dev/null 2>&1)
   nested_status=$?
   ((nested_status != 0)) ||
     fail "a copy with $what passed — nothing here would notice that defect"
@@ -837,7 +840,7 @@ expect_red() { # expect_red COPY WHAT FRAGMENT
 }
 
 # The wrapper must still pass as itself, or the copies prove nothing
-nested_ok=$(CHECK_OBSI_NESTED=1 OBSI_UNDER_TEST="$obsi" "$self" "$root" 2>&1) ||
+nested_ok=$(CHECK_OBSI_NESTED=1 OBSI_UNDER_TEST="$obsi" "$self" "$root" </dev/null 2>&1) ||
   fail "the unmodified wrapper failed its own checks: $nested_ok"
 
 # shellcheck disable=SC2016
