@@ -517,7 +517,6 @@ if (mine.size) {
   const telling = new Set(Object.keys(held).filter(t => held[t] <= ceiling))
   if (telling.size) {
     for (const f of files) {
-      if (f.path === target) continue
       for (const t of tagsOf(f)) if (telling.has(t)) { bump(f.path, 1, 'tag'); break }
     }
   }

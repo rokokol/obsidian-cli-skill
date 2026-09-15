@@ -992,11 +992,15 @@ defect 'related/hash-stripped' 'obsi.sh' \
   '.concat(fmTags(fm))' \
   'a frontmatter tag never meets the same tag written inline, so graph related misses what they share'
 
-defect 'related/self-skipped' 'obsi.sh' \
-  '      if (f.path === target) continue' \
-  '      void 0' \
-  'graph related could list the note itself as related to itself' \
-  expect survived 'bump already refuses every note in the linked set, and the target is added to it, so the skip saves work and changes nothing a caller sees'
+defect 'related/self-scored' 'obsi.sh' \
+  'linked.add(target)' \
+  'void 0' \
+  'graph related lists the note itself as related to itself, through every signal it shares with itself'
+
+defect 'related/neighbours-scored' 'obsi.sh' \
+  '  if (linked.has(p) || !(p in indeg)) return' \
+  '  if (!(p in indeg)) return' \
+  'graph related lists the notes the target already links to or is linked from, which links and backlinks already answer'
 
 # ---- selftest, run in the app -----------------------------------------------------------------------
 
