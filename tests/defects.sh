@@ -653,6 +653,22 @@ EOF
   'find --prop naming a property no note has goes on to filter both streams instead of answering at once' \
   expect survived 'an empty allowlist makes the awk and the grep below keep nothing too, so the answer is the same sentence; the shortcut saves work and changes nothing a caller sees'
 
+defect 'find/empty-sentence' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+  if [[ -z "$ranked" ]]; then
+    echo "No matches found."
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+  if [[ -z "$ranked" ]]; then
+    echo ""
+EOF
+  )" \
+  'a find with no matches prints an empty line, which a caller cannot tell from a failure that printed nothing' \
+  expect caught 'find with no matches'
+
 defect 'find/prop-filters-index' 'obsi.sh' \
   "$(
     cat <<'EOF'
