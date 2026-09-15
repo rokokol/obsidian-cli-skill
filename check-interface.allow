@@ -1,0 +1,6 @@
+# Wrong calls the docs show on purpose, excused for check-interface.sh -x: ID PATH [TEXT]
+# The typo is the lesson: an unknown parameter is ignored in silence
+undeclared-arg SKILL.md fil=Garden
+undeclared-arg references/pitfalls.md fil=Garden
+# format= on aliases is the parameter a command that does not advertise it ignores
+undeclared-arg references/commands.md aliases verbose format=json

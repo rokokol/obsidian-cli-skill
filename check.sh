@@ -104,9 +104,11 @@ done | cut -d' ' -f1 | sort -u >"$work/was.txt"
 grep -q '^[a-z][^ ]* [a-z<]' "$work/declared.txt" || fail "no parameter was read from tests/obsidian-help.txt — its shape moved"
 # The ci skill's check-interface.sh, vendored: `obsidian-cli NAME …` in a span or a fenced
 # line, and a span opening with a declared command, are held to the list, and it plants its
-# own defects on every run. A typo shown on purpose carries `check-interface: allow`, and
-# -r makes a command the recordings once had and the current one lacks a finding anywhere
-./check-interface.sh -d "$work/declared.txt" -r "$work/was.txt" -p 'obsidian-cli ' -b -f SKILL.md README.md references/*.md
+# own defects on every run. A typo shown on purpose is excused in check-interface.allow,
+# which no agent loads, and -r makes a command the recordings once had and the current one
+# lacks a finding anywhere
+./check-interface.sh -d "$work/declared.txt" -r "$work/was.txt" -x check-interface.allow \
+  -p 'obsidian-cli ' -b -f SKILL.md README.md references/*.md
 
 echo "== the wrapper's shell half behaves, against a fake CLI"
 # The shell half against the stub, and the JavaScript the wrapper builds for find, graph

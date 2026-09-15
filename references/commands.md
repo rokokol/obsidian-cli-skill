@@ -23,7 +23,7 @@ The examples below are renamed for publication. The vault they were measured on 
 
 Empty-result sentences are the reason to test for the `Error: ` prefix rather than for empty output — the two are different states
 
-`format=` is not a global flag. Thirteen of the 92 commands available here advertise one, and a command that does not advertise it ignores it in silence like any other unknown parameter: `aliases verbose format=json` prints the same bytes as `aliases verbose`. Derive the set from the machine rather than trusting that number: <!-- check-interface: allow — format= on aliases is the ignored parameter shown on purpose -->
+`format=` is not a global flag. Thirteen of the 92 commands available here advertise one, and a command that does not advertise it ignores it in silence like any other unknown parameter: `aliases verbose format=json` prints the same bytes as `aliases verbose`. Derive the set from the machine rather than trusting that number:
 
 ```bash
 obsidian-cli help | awk '/^  [a-z][a-z0-9:.-]*  +/ { cmd = $1 } /format=/ && cmd { print cmd, $0 }'

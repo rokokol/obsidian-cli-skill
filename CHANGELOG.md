@@ -6,6 +6,7 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 
 ### Changed
 
+- the wrong calls the docs show on purpose, `fil=` and `format=` on `aliases`, are excused in `check-interface.allow`, which no agent loads, rather than by a `check-interface: allow` comment in `SKILL.md` and the references, which every invocation loaded; the vendored `check-interface.sh`, `check-skill.sh` and `check-changelog.sh` take their current revisions
 - `check-skill.sh` is vendored from the [skill-authoring](https://github.com/rokokol/skill-authoring-skill) skill, where the rules it checks now live, and reports the rules a skill can break without breaking as warnings on stdout, the exit code unchanged: a `Layout` or install section in runtime, `used to`, a `path:line` citation, a link to a sibling skill, a concrete model id, and the rest its `--help` lists
 
 ## 2026-09-12
