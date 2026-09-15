@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# The defect list for this repository, read by the tests skill's harness:
+# The defect list for this repository, read by the tests skill's harness, vendored beside
+# it, and run by .github/workflows/falsify.yml:
 #
-#   t.sh falsify -- env CHECK_OBSI_NESTED=1 ./check-obsi.sh .
+#   tests/t.sh falsify -- env CHECK_OBSI_NESTED=1 ./check-obsi.sh .
 #
 # Each entry breaks one guard of obsi.sh — its shell half, or the JavaScript it hands to the
 # app's eval — and requires the behaviour suite to notice. CHECK_OBSI_NESTED=1 runs the

@@ -7,6 +7,7 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 ### Added
 
 - `tests/defects.sh`, the defect list the tests skill's `t.sh falsify` reads: one entry per guard of `obsi.sh`, run against `CHECK_OBSI_NESTED=1 ./check-obsi.sh .`, and every entry is caught or declared unobservable. `check-obsi.sh` now runs every graph query and the `--prop` query in node against the fake vault, which gained an image link, a broken link, a number in an alias list, a tag with a trailing slash and a capitalised tag spelling from `getTags`; it also checks each count's call site, the refusals' own messages, the discovery order and a client that exits non-zero. The stub cuts `search` to its `limit=`, the way the CLI does
+- `.github/workflows/falsify.yml` runs `tests/defects.sh` on every push to master and by hand, so a guard of `obsi.sh` the suite stops noticing turns CI red; `t.sh` and its markers are vendored from the [tests](https://github.com/rokokol/tests-skill) skill into `tests/`, and `tests/t.conf` names `check-obsi.sh` as a test file, so `t.sh prove` keeps it when it takes a fix away
 
 ### Changed
 

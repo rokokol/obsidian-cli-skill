@@ -9,3 +9,5 @@ check-changelog.sh rokokol/versioning-skill check-changelog.sh c64d63e19ff63c4fc
 check-sh.sh rokokol/bash-best-practices-skill check-sh.sh 7d6e178e524e0ddd87688a523bfeedbef4e1fcd9 378308dace9613c6e24e2a704518e9136c59abab
 check-interface.sh rokokol/ci-skill templates/check-interface.sh 974454004b06e09b0af67485f0781eb87afc3c11 0d82627ed694b7b91ab969c925aa7919ee5976de
 check-skill.sh rokokol/skill-authoring-skill check-skill.sh ff7f0b2694159bc6b3635929c94d2d3de20d958b 1f7ea1b976e91e3f6e00256538902693c7d2ca10
+tests/t.sh rokokol/tests-skill t.sh eb9376c3789e31d0fbada2c1f3480dc740b72371 8857094387e7e808f535d2fbb283ca16a0add26a
+tests/markers/ rokokol/tests-skill markers/ eb9376c3789e31d0fbada2c1f3480dc740b72371 65d141bbf07ecb99a3bd6ebfe4e0d3050a2c1ab4

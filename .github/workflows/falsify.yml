@@ -1,0 +1,36 @@
+# The defect list, run through t.sh falsify on the default branch and by hand. Not on pull
+# requests: it costs one suite run per defect, and --since, the filter a pull request would
+# take, is not a proof. A survivor fails its shard, so the badge is the last full verdict.
+# Taken from templates/github/workflows/falsify.yml in https://github.com/rokokol/tests-skill
+name: falsify
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  falsify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      # Every shard reports: one survivor must not cancel the runs that would find the rest
+      fail-fast: false
+      matrix:
+        # Only the length of this list matters; job-total below reads it, so the width
+        # is written once and widening the matrix needs no other edit. One shard: the
+        # whole list takes a few minutes
+        shard: [1]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      # CHECK_OBSI_NESTED skips check-obsi.sh's own planted-defect pass, which edits copies
+      # of obsi.sh by pattern and would go red under a mutant for reasons of its own
+      - name: one shard of the defect list
+        run: nix develop --no-write-lock-file -c ./tests/t.sh falsify --shard "$((SHARD_INDEX + 1))/$SHARD_TOTAL" -- env CHECK_OBSI_NESTED=1 ./check-obsi.sh .
+        env:
+          SHARD_INDEX: ${{ strategy.job-index }}
+          SHARD_TOTAL: ${{ strategy.job-total }}
