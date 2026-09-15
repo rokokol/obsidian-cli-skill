@@ -1,0 +1,946 @@
+#!/usr/bin/env bash
+# The defect list for this repository, read by the tests skill's harness:
+#
+#   t.sh falsify -- env CHECK_OBSI_NESTED=1 ./check-obsi.sh .
+#
+# Each entry breaks one guard of obsi.sh — its shell half, or the JavaScript it hands to the
+# app's eval — and requires the behaviour suite to notice. CHECK_OBSI_NESTED=1 runs the
+# suite's checks without its own planted-defect pass: that pass plants its edits by pattern
+# into a copy of obsi.sh, so under one of these edits a plant can stop matching and send the
+# run red for a reason that has nothing to do with the defect in flight. The CONSEQUENCE is
+# what goes wrong in the world when that guard stops working; when an entry survives, that
+# sentence is the report.
+#
+#   defect NAME FILE FIND REPLACE CONSEQUENCE [expect survived REASON | expect caught FRAGMENT]
+#
+# A FIND or REPLACE that holds a $ or both kinds of quote is a quoted heredoc: it keeps the
+# line exactly as obsi.sh spells it, with no escaping to get wrong. Two entries share a line
+# only where the line holds two behaviours a caller can tell apart
+
+# ---- reaching the app ------------------------------------------------------------------
+
+defect 'env/out-export' 'obsi.sh' \
+  'export -n out err' \
+  'export -n err' \
+  'under a nix dev shell a large answer held in "out" is exported to every later command, exec refuses it, and find says No matches found'
+
+defect 'reach/version-shape' 'obsi.sh' \
+  '      [0-9]*.[0-9]*)' \
+  '      *)' \
+  'any binary called obsidian-cli is taken for the client, whatever it answers, and every call goes to it'
+
+defect 'reach/env-first' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+for candidate in ${OBSIDIAN_CLI:+"$OBSIDIAN_CLI"} obsidian-cli obsidian; do
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+for candidate in obsidian-cli obsidian ${OBSIDIAN_CLI:+"$OBSIDIAN_CLI"}; do
+EOF
+  )" \
+  'OBSIDIAN_CLI is ignored whenever another client on PATH answers, so the user cannot choose which client talks to the app'
+
+defect 'reach/launcher-last' 'obsi.sh' \
+  ' obsidian-cli obsidian; do' \
+  ' obsidian obsidian-cli; do' \
+  'the GUI launcher is asked for its version before the client, and on a packaged install every call opens an Obsidian window'
+
+defect 'reach/stop-when-app-down' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+        unreachable="$candidate"
+        break
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+        unreachable="$candidate"
+        continue
+EOF
+  )" \
+  'with the app closed, discovery goes on to run "obsidian", which on a packaged install opens a window instead of answering'
+
+defect 'reach/app-down-message' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+  [[ -z "$unreachable" ]] ||
+EOF
+  )" \
+  '  true ||' \
+  'someone with the client installed and the app closed is told to install a client they already have'
+
+defect 'reach/probe-stdin' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+answer=$("$candidate" version </dev/null 2>&1)
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+answer=$("$candidate" version 2>&1)
+EOF
+  )" \
+  'every obsi.sh call inside a while-read loop swallows the rest of the list while it looks for the client'
+
+# ---- the dishonest client ------------------------------------------------------------------
+
+defect 'cli/stdin' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+"$@" </dev/null 2>"$scratch/stderr")
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+"$@" 2>"$scratch/stderr")
+EOF
+  )" \
+  'every CLI call inside a while-read loop swallows the rest of the list, and the loop quietly does one item'
+
+defect 'cli/error-at-exit-0' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+    "Error: "*) die "${out#Error: }" ;;
+  esac
+  ((status == 0))
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+    "Error: "*) : ;;
+  esac
+  ((status == 0))
+EOF
+  )" \
+  'a missing note or a bad parameter reported by the app exits 0, and the caller acts on an error message as though it were the answer'
+
+defect 'cli/nonzero-status' 'obsi.sh' \
+  '((status == 0)) || die' \
+  'true || die' \
+  'a client that fails or crashes reads as success, with whatever it printed before dying taken for the answer'
+
+defect 'cli/stderr-apart' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+[[ -z "$err" ]] || printf '%s\n' "$err" >&2
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+[[ -z "$err" ]] || printf '%s\n' "$err"
+EOF
+  )" \
+  'a runtime warning from the app lands inside the answer, a dumped graph.json included, and makes it unparseable'
+
+defect 'js/prefix' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+out="${out#"=> "}"
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+out="$out"
+EOF
+  )" \
+  'every answer from eval starts with "=> ", and an error raised by the JavaScript exits 0'
+
+defect 'js/error-at-exit-0' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+    "Error: "*) die "${out#Error: }" ;;
+  esac
+  printf '%s\n' "$out"
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+    "Error: "*) : ;;
+  esac
+  printf '%s\n' "$out"
+EOF
+  )" \
+  'a refusal raised inside the app — a note not in the graph, a selftest that found drift — prints and exits 0'
+
+defect 'answer/empty' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+[[ -n "$out" ]] || die "the app answered nothing
+EOF
+  )" \
+  'true || die "the app answered nothing' \
+  'a graph query the app answered with nothing prints a blank line at exit 0, which reads like an answer'
+
+# ---- counts spliced into the app's JavaScript ------------------------------------------------
+
+defect 'count/validator-body' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+  for value in "$@"; do
+    [[ "$value" =~ ^[1-9][0-9]*$ ]] || die "expected a positive number, not '$value'"
+  done
+EOF
+  )" \
+  '  :' \
+  'a row count such as "app", or a crafted expression, runs as code inside the app with full access to the vault'
+
+defect 'count/leading-zero' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+=~ ^[1-9][0-9]*$ ]]
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+=~ ^[0-9]+$ ]]
+EOF
+  )" \
+  'a count of 010 is octal 8 in the app and 0 answers zero rows, both at exit 0 as if they were what was asked'
+
+defect 'count/hubs' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+      need_count "${1:-10}"
+      answer graph_hubs
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+      :
+      answer graph_hubs
+EOF
+  )" \
+  'the row count of graph hubs is spliced into the app unchecked, where "app" answers No links found and a crafted value runs as code'
+
+defect 'count/ends' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+      need_count "${1:-10}"
+      answer graph_ends
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+      :
+      answer graph_ends
+EOF
+  )" \
+  'the row count of graph ends is spliced into the app unchecked, and a crafted value runs as code'
+
+defect 'count/components-width' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+need_count "${1:-10}" "${2:-5}"
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+need_count "${1:-10}"
+EOF
+  )" \
+  'the second count of graph components, how many notes each row shows, is spliced into the app unchecked'
+
+defect 'count/unresolved' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+need_count "${1:-40}"
+EOF
+  )" \
+  ':' \
+  'the row count of graph unresolved is spliced into the app unchecked, and a crafted value runs as code'
+
+defect 'count/find-limit' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+    need_count "$limit"
+EOF
+  )" \
+  '    :' \
+  'find --limit abc is not refused, and the cut and its notice go wrong without a word'
+
+defect 'count/related-rows' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+need_count "$related_rows"
+EOF
+  )" \
+  ':' \
+  'the row count of graph related is spliced into the app unchecked, and a crafted value runs as code'
+
+# ---- graph arguments -----------------------------------------------------------------------
+
+defect 'related/tag-max-shape' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+[[ "$related_tags" =~ ^(0|[1-9][0-9]*)$ ]] ||
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+[[ "$related_tags" =~ ^-?[0-9]+$ ]] ||
+EOF
+  )" \
+  '--tag-max-notes 010 means 8 in the app, and -1 silently means the default'
+
+defect 'related/tag-max-default' 'obsi.sh' \
+  '        related_tags=-1' \
+  '        related_tags=0' \
+  'graph related without --tag-max-notes ignores shared tags altogether, rather than counting the ones on under a twentieth of the vault'
+
+defect 'related/tag-max-needs-value' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+(($# >= 2)) || die "--tag-max-notes needs a number
+EOF
+  )" \
+  'true || die "--tag-max-notes needs a number' \
+  "--tag-max-notes with no value ends in bash's own unbound-variable error instead of saying what it needs"
+
+defect 'related/unknown-option' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+-*) die "unknown option '$1' — graph related takes a row count and --tag-max-notes" ;;
+EOF
+  )" \
+  '-*) shift ;;' \
+  'a mistyped flag to graph related is swallowed and the query runs with defaults as though it had been understood'
+
+defect 'related/needs-note' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+[[ $# -ge 1 ]] || die "graph related needs a note path
+EOF
+  )" \
+  'true || die "graph related needs a note path' \
+  "graph related with no note ends in bash's unbound-variable error instead of saying it needs a path"
+
+defect 'path/two-notes' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+[[ $# -eq 2 ]] || die "graph path needs two
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+[[ $# -ge 2 ]] || die "graph path needs two
+EOF
+  )" \
+  'graph path with a third note answers for the first two and drops the third without a word'
+
+defect 'dump/one-file' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+[[ $# -le 1 ]] || die "graph dump takes one file
+EOF
+  )" \
+  'true || die "graph dump takes one file' \
+  'graph dump with two files writes the first and silently ignores the second'
+
+defect 'dump/asked-first' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+  [[ -d "$dir" && -w "$dir" && (! -e "$target" || -w "$target") ]] ||
+EOF
+  )" \
+  '  true ||' \
+  'an unwritable target is found out only after the whole graph was queried, and a read-only graph.json in a writable folder is overwritten'
+
+defect 'dump/in-place' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+printf '%s\n' "$out" >"$tmp" && mv -f -- "$tmp" "$target"
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+printf '%s\n' "$out" >"$target"
+EOF
+  )" \
+  'the graph is written in place, so a failed write leaves graph.json half-written, and a hidden temp file is left beside it on every dump'
+
+defect 'dump/truncates-first' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+  local target="$1" dir tmp out
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+  local target="$1" dir tmp out
+  : >"$target"
+EOF
+  )" \
+  'an app that is down turns an existing graph.json into an empty file'
+
+defect 'graph/unknown-query' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+*) die "unknown graph query '$what' — see obsi.sh --help" ;;
+EOF
+  )" \
+  '*) answer graph_summary ;;' \
+  'a misspelt graph query answers with the summary, as if it were what was asked'
+
+defect 'selftest/dispatched' 'obsi.sh' \
+  '    answer self_test' \
+  '    cli selftest' \
+  'selftest goes to the CLI as a command it does not have, and never checks the copied tag rules'
+
+defect 'selftest/no-args' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+(($# == 0)) || die "selftest takes no arguments"
+EOF
+  )" \
+  'true || die "selftest takes no arguments"' \
+  'words after selftest are dropped in silence, the CLI habit the wrapper exists to stop'
+
+# ---- the wrapper's own arguments --------------------------------------------------------------
+
+defect 'args/vault-one-word' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+prefix=("vault=$2")
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+prefix=(vault= "$2")
+EOF
+  )" \
+  'a vault name with a space reaches the CLI as two arguments, it ignores both, and answers for whichever vault is open'
+
+defect 'args/vault-needs-name' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+(($# >= 2)) || die "--vault needs a name"
+EOF
+  )" \
+  'true || die "--vault needs a name"' \
+  "--vault with no name ends in bash's unbound-variable error instead of saying it needs a name"
+
+defect 'args/vault-selector' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+      prefix=("$1")
+EOF
+  )" \
+  '      break' \
+  'obsi.sh vault=X find … sends find to the CLI as its own command, which the CLI does not have'
+
+defect 'args/no-command' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+  usage >&2
+  exit 2
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+  usage >&2
+  exit 0
+EOF
+  )" \
+  'a call whose command expanded to nothing exits 0, as though it had done something'
+
+defect 'pass/vault-after-command' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+if [[ -n "$command_word" && ("$arg" == vault=* || "$arg" == --vault) ]]; then
+EOF
+  )" \
+  'if false; then' \
+  'a vault named after the command word is dropped by the CLI in silence, and the answer comes from whichever vault is open'
+
+# ---- find: arguments ---------------------------------------------------------------------------
+
+defect 'find/needs-query' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+(($#)) || die "find needs something to look for"
+EOF
+  )" \
+  'true || die "find needs something to look for"' \
+  "find with nothing to look for ends in bash's unbound-variable error instead of saying what it needs"
+
+defect 'find/unknown-option' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+*) die "unknown option '$1' — see obsi.sh --help" ;;
+EOF
+  )" \
+  '*) shift ;;' \
+  'a mistyped find flag is swallowed and the search runs wider than asked, looking like the narrowed answer'
+
+defect 'find/limit-needs-value' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+(($# >= 2)) || die "--limit needs a number"
+EOF
+  )" \
+  'true || die "--limit needs a number"' \
+  "--limit with no value ends in bash's unbound-variable error instead of saying it needs a number"
+
+defect 'find/prop-needs-value' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+(($# >= 2)) || die "--prop needs NAME or NAME=VALUE"
+EOF
+  )" \
+  'true || die "--prop needs NAME or NAME=VALUE"' \
+  "--prop with no value ends in bash's unbound-variable error instead of saying it needs a name"
+
+defect 'find/value-marker' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+          markers="$markers prop"
+EOF
+  )" \
+  '          :' \
+  '--value is accepted and dropped, so find --value searches every field instead of property values'
+
+defect 'find/default-markers' 'obsi.sh' \
+  'markers=" name alias tag prop heading body"' \
+  'markers=" name alias tag heading body"' \
+  'a plain find stops matching property values, though naming no field is documented to mean all of them'
+
+defect 'find/value-scope-name' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+scope="${prop%%=*}"
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+scope="$prop"
+EOF
+  )" \
+  'find --value --prop status=draft looks for a property literally named status=draft and finds nothing'
+
+defect 'find/scope-needs-value' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+[[ -z "$value_flag" || -z "$prop" ]] ||
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+[[ -z "$prop" ]] ||
+EOF
+  )" \
+  'find --prop status confines the value match to status even without --value, so matches in other properties vanish'
+
+# ---- find: merging, ranking, bounding --------------------------------------------------------
+
+defect 'find/text-over-fetch' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+limit="$((limit * 3))")
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+limit="$limit")
+EOF
+  )" \
+  'the text search is asked for only as many notes as are shown, so its cap is never seen and the notice states a floor as an exact count'
+
+defect 'find/search-sentence' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+[[ "$body" == "No matches found." ]] && body=""
+EOF
+  )" \
+  'true' \
+  'search answering No matches found is ranked as a note by that name, one point, text'
+
+defect 'find/capped-floor' 'obsi.sh' \
+  '>= limit * 3))' \
+  '> limit * 3))' \
+  'a text search that filled its cap exactly is reported as a complete count of what was left out, not a floor'
+
+defect 'find/prop-empty-shortcut' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+    if [[ ! -s "$allow" ]]; then
+      echo "No matches found."
+      return
+    fi
+EOF
+  )" \
+  '    :' \
+  'find --prop naming a property no note has goes on to filter both streams instead of answering at once' \
+  expect survived 'an empty allowlist makes the awk and the grep below keep nothing too, so the answer is the same sentence; the shortcut saves work and changes nothing a caller sees'
+
+defect 'find/prop-filters-index' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+meta=$(printf '%s\n' "$meta" | awk -F'\t' 'NR == FNR { a[$0]; next } $3 in a' "$allow" -)
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+meta=$meta
+EOF
+  )" \
+  '--prop filters the text half only, and every name, alias, tag and heading hit comes back unfiltered'
+
+defect 'find/prop-filters-text' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+body=$(printf '%s\n' "$body" | grep -Fxf "$allow" || true)
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+body=$body
+EOF
+  )" \
+  '--prop filters the index half only, and every text hit comes back unfiltered'
+
+defect 'find/merge-adds' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+$0 != "" { s[$0] += 1;
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+$0 != "" { s[$0] = 1;
+EOF
+  )" \
+  'a note found both by alias and in the text drops to one point and ranks below notes that only mention the word'
+
+defect 'find/rank-order' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+sort -t"$(printf '\t')" -k1,1nr -k3,3)
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+sort -t"$(printf '\t')" -k3,3)
+EOF
+  )" \
+  'find lists notes alphabetically, and --limit cuts off the exact match in favour of whatever sorts first'
+
+defect 'find/empty-sentence' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+  if [[ -z "$ranked" ]]; then
+EOF
+  )" \
+  '  if false; then' \
+  'find with no matches prints a blank line at exit 0, which a caller cannot tell from a failure'
+
+defect 'find/limit-applied' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+awk -v n="$limit" 'NR <= n'
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+awk -v n="$limit" 'NR > 0'
+EOF
+  )" \
+  'find prints every match however many there are, while its notice still claims some were held back'
+
+defect 'find/head-sigpipe' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+awk -v n="$limit" 'NR <= n'
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+head -n "$limit"
+EOF
+  )" \
+  'find over a large result dies of SIGPIPE under pipefail before it can say what it cut'
+
+defect 'find/cut-said' 'obsi.sh' \
+  'if ((total > limit)); then' \
+  'if false; then' \
+  'find cuts at --limit in silence, and "these are the notes with that tag" is confidently wrong'
+
+# ---- find: the index query, run in the app ------------------------------------------------------
+
+defect 'js-find/markers' 'obsi.sh' \
+  'const on = m => markers.indexOf(m) >= 0' \
+  'const on = m => true' \
+  'find --alias answers with name, tag and property hits as well, so the one question only it can ask is gone'
+
+defect 'js-find/name-exact' 'obsi.sh' \
+  "if (is(f.basename)) add(f.path, 10, 'name', f.basename)" \
+  "if (false) add(f.path, 10, 'name', f.basename)" \
+  'a note whose name is exactly the query scores as a partial match and can rank below notes that merely contain it'
+
+defect 'js-find/alias-exact' 'obsi.sh' \
+  "if (is(a)) add(f.path, 9, 'alias', a)" \
+  "if (false) add(f.path, 9, 'alias', a)" \
+  'a note whose alias is exactly the query scores as a partial match and loses its rank'
+
+defect 'js-find/tag-marker' 'obsi.sh' \
+  "  if (on('tag')) {" \
+  '  if (false) {' \
+  'find --tag finds nothing, on any vault'
+
+defect 'js-find/best-per-field' 'obsi.sh' \
+  '} else if (score > h.best[kind]) h.best[kind] = score' \
+  '} else h.best[kind] += score' \
+  'a note carrying one tag three ways, or four matching headings, outranks an exact name match'
+
+defect 'js-find/fields-add-up' 'obsi.sh' \
+  'h.kinds.reduce((sum, k) => sum + h.best[k], 0)' \
+  'h.best[h.kinds[0]]' \
+  'a note that matches by name and by alias scores only for the first, and ranks with notes matching once'
+
+defect 'js-find/prop-skips-lists' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+if (scope ? k !== scope : /^(aliases|tags)$/i.test(k)) continue
+EOF
+  )" \
+  'if (scope ? k !== scope : false) continue' \
+  'every alias and tag is reported a second time as a property value, and --value answers with aliases and tags'
+
+defect 'js-find/value-scope' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+if (scope ? k !== scope : /^(aliases|tags)$/i.test(k)) continue
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+if (/^(aliases|tags)$/i.test(k)) continue
+EOF
+  )" \
+  'find --value --prop status answers with draft in any property of the note, not in status alone'
+
+defect 'js-find/prop-marker' 'obsi.sh' \
+  "if (on('prop')) for" \
+  "if (on('none')) for" \
+  'find --value finds nothing, and a plain find never matches a property value'
+
+# ---- Obsidian's reading of tags and aliases, copied ---------------------------------------------
+
+defect 'fm/string-one-item' 'obsi.sh' \
+  "if (typeof v === 'string') return [v.trim()]" \
+  "if (typeof v === 'string') return v.split(',').map(x => x.trim())" \
+  'aliases: coastline, shore becomes two aliases, which Obsidian itself never makes of it'
+
+defect 'fm/list-strings-only' 'obsi.sh' \
+  "v.filter(x => typeof x === 'string').map(x => x.trim())" \
+  'v.map(x => x.trim())' \
+  'one note with a number in its aliases or tags list makes every find and graph related throw inside the app'
+
+defect 'fm/list-item-whole' 'obsi.sh' \
+  "v.filter(x => typeof x === 'string').map(x => x.trim())" \
+  "v.filter(x => typeof x === 'string').flatMap(x => x.split(',')).map(x => x.trim())" \
+  'the alias "Smith, John" becomes two aliases, Smith and John, and an exact search for it finds nothing'
+
+defect 'fm/tags-key-any-case' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+fmList(fm, /^tags$/i)
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+fmList(fm, /^tags$/)
+EOF
+  )" \
+  'a note with a capitalised Tags key has no tags to find, graph related or selftest, though Obsidian reads them'
+
+defect 'fm/aliases-key-any-case' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+fmList(fm, /^aliases$/i)
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+fmList(fm, /^aliases$/)
+EOF
+  )" \
+  'a note with a capitalised Aliases key cannot be found by its aliases, though Obsidian reads them'
+
+defect 'fm/tag-space' 'obsi.sh' \
+  ".filter(t => t && !t.includes(' '))" \
+  '.filter(t => t)' \
+  'tags: a, b is read as a tag, where Obsidian gives the note no tags at all'
+
+defect 'fm/tag-hash-once' 'obsi.sh' \
+  "t.charAt(0) === '#' ? t : '#' + t" \
+  "'#' + t" \
+  'a frontmatter tag written as #x is read as ##x, and find, graph related and selftest all miss it'
+
+# ---- --prop, asked of the app ----------------------------------------------------------------------
+
+defect 'js-prop/key-present' 'obsi.sh' \
+  'if (!(key in fm)) continue' \
+  'if (false) continue' \
+  'find --prop status lets every note through, including notes that have no status at all'
+
+defect 'js-prop/value' 'obsi.sh' \
+  'if (want !== null && [].concat(fm[key]).map(String).indexOf(want) < 0) continue' \
+  'if (false) continue' \
+  'find --prop status=draft lets through every note that has a status, whatever it is'
+
+defect 'js-prop/list-items' 'obsi.sh' \
+  '[].concat(fm[key]).map(String).indexOf(want)' \
+  '[String(fm[key])].indexOf(want)' \
+  'find --prop tags=x misses every note whose tags are a list, which is nearly all of them'
+
+# ---- the graph, run in the app -----------------------------------------------------------------------
+
+defect 'graph/attachments-apart' 'obsi.sh' \
+  'if (!isNote(t)) { toAttachments++; continue }' \
+  'if (!isNote(t)) { toAttachments++ }' \
+  'an image linked from forty notes counts as a note and tops graph hubs'
+
+defect 'graph/undirected-components' 'obsi.sh' \
+  'adj[s].push(t); adj[t].push(s)' \
+  'adj[s].push(t)' \
+  'components follow links one way only, so a connected vault reports islands that are not there'
+
+defect 'graph/summary-links' 'obsi.sh' \
+  "['links between notes', links - toAttachments]," \
+  "['links between notes', links]," \
+  'graph summary counts links to attachments twice, once as links between notes'
+
+defect 'graph/summary-largest' 'obsi.sh' \
+  'sizes.sort((a, b) => b - a)' \
+  'sizes.sort((a, b) => a - b)' \
+  'graph summary reports the smallest component as the largest'
+
+defect 'graph/hubs-linked-only' 'obsi.sh' \
+  'for (const p in indeg) if (indeg[p] > 0) linkedTo[p] = indeg[p]' \
+  'for (const p in indeg) linkedTo[p] = indeg[p]' \
+  'graph hubs lists notes nothing links to, at zero, and never answers No links found'
+
+defect 'graph/hubs-order' 'obsi.sh' \
+  'map[b] - map[a] || a.localeCompare(b)' \
+  'map[a] - map[b] || a.localeCompare(b)' \
+  'graph hubs lists the least linked-to notes first, and its cut drops the real hubs'
+
+defect 'graph/hubs-cut-said' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+if (ranked.length > $1) lines.push('…\t' + (ranked.length - $1) + '\tmore linked-to notes')
+EOF
+  )" \
+  'void 0' \
+  'graph hubs cuts its list in silence and reads as the complete set'
+
+defect 'graph/ends-incoming' 'obsi.sh' \
+  'const nothing = notes.filter(n => indeg[n] === 0).sort()' \
+  'const nothing = notes.filter(n => outdeg[n] === 0).sort()' \
+  'graph ends reports notes that link nowhere as notes nothing links to'
+
+defect 'graph/components-largest-first' 'obsi.sh' \
+  'members.sort((a, b) => b.length - a.length || a[0].localeCompare(b[0]))' \
+  'members.sort((a, b) => a[0].localeCompare(b[0]))' \
+  'graph components lists islands alphabetically, and its cut can drop the mainland'
+
+defect 'graph/components-width' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+const shown = group.sort().slice(0, $2)
+EOF
+  )" \
+  'const shown = group.sort()' \
+  'one component row lists every note in it, hundreds of paths on one line'
+
+defect 'graph/path-directed' 'obsi.sh' \
+  'for (const y of fwd[x]) if (!(y in prev))' \
+  'for (const y of adj[x]) if (!(y in prev))' \
+  'graph path walks links backwards, and reports a path a reader clicking links could never follow'
+
+defect 'graph/path-unknown-target' 'obsi.sh' \
+  "if (!(to in indeg)) return 'Error: ' + to + ' is not a note in the graph'" \
+  'void 0' \
+  'a misspelt target answers No path found, as though the note existed and were unreachable'
+
+defect 'graph/unresolved-source' 'obsi.sh' \
+  'rows.push([t, s, U[s][t]])' \
+  'rows.push([t, U[s][t]])' \
+  'graph unresolved lists each broken link without the note it is in, the one thing it exists to add'
+
+# ---- graph related, run in the app ------------------------------------------------------------------
+
+defect 'related/neighbours-excluded' 'obsi.sh' \
+  'const linked = new Set(fwd[target].concat(rev[target]))' \
+  'const linked = new Set()' \
+  'graph related fills with the notes already linked to it, which links and backlinks already answer'
+
+defect 'related/co-cited' 'obsi.sh' \
+  "for (const s of rev[target]) for (const t of fwd[s]) bump(t, 2, 'co-cited')" \
+  'void 0' \
+  'graph related never names co-cited notes, the strongest signal it has'
+
+defect 'related/shares-links' 'obsi.sh' \
+  "for (const t of fwd[target]) for (const s of rev[t]) bump(s, 2, 'shares-links')" \
+  'void 0' \
+  'graph related never names notes that point at the same things'
+
+defect 'related/tag-ceiling' 'obsi.sh' \
+  'held[t] <= ceiling' \
+  'held[t] <= Infinity' \
+  'a tag on a fifth of the vault puts every note carrying it on the related list, and --tag-max-notes does nothing'
+
+defect 'related/hash-stripped' 'obsi.sh' \
+  '.concat(fmTags(fm).map(t => t.slice(1)))' \
+  '.concat(fmTags(fm))' \
+  'a frontmatter tag never meets the same tag written inline, so graph related misses what they share'
+
+defect 'related/self-skipped' 'obsi.sh' \
+  '      if (f.path === target) continue' \
+  '      void 0' \
+  'graph related could list the note itself as related to itself' \
+  expect survived 'bump already refuses every note in the linked set, and the target is added to it, so the skip saves work and changes nothing a caller sees'
+
+# ---- selftest, run in the app -----------------------------------------------------------------------
+
+defect 'selftest/ignored' 'obsi.sh' \
+  'if (app.metadataCache.isUserIgnored(f.path)) continue' \
+  'if (false) continue' \
+  "selftest counts the vault's excluded files, which Obsidian does not, and reports drift on every vault that excludes any"
+
+defect 'selftest/invalid' 'obsi.sh' \
+  'if (!valid.test(t) || numeric.test(t)) return' \
+  'if (numeric.test(t)) return' \
+  'selftest counts a template placeholder as a tag, and reports drift that is not there'
+
+defect 'selftest/numeric' 'obsi.sh' \
+  'if (!valid.test(t) || numeric.test(t)) return' \
+  'if (!valid.test(t)) return' \
+  'selftest counts a number such as #123 as a tag, which Obsidian does not, and reports drift that is not there'
+
+defect 'selftest/case' 'obsi.sh' \
+  'const k = t.toLowerCase()' \
+  'const k = t' \
+  'selftest keeps one tag spelt in two cases apart, and reports drift that is not there'
+
+defect 'selftest/parents' 'obsi.sh' \
+  'if (last !== t) count(t.slice(0, t.length - last.length - 1))' \
+  'void 0' \
+  'selftest does not count a nested tag toward its parent, and reports drift that is not there'
+
+defect 'selftest/trailing-slash' 'obsi.sh' \
+  "if (t.endsWith('/')) t = t.slice(0, -1)" \
+  'void 0' \
+  'selftest counts a tag written with a trailing slash as a tag of its own, and reports drift that is not there'
+
+defect 'selftest/theirs-folded' 'obsi.sh' \
+  'theirs[t.toLowerCase()] = (theirs[t.toLowerCase()] || 0) + obsidian[t]' \
+  'theirs[t] = (theirs[t] || 0) + obsidian[t]' \
+  'selftest reports drift whenever Obsidian keeps a merged tag in a capitalised spelling'
+
+defect 'selftest/reports' 'obsi.sh' \
+  'if (rows.length)' \
+  'if (false)' \
+  'selftest says the tags agree when they do not, after the Obsidian update it exists to check'

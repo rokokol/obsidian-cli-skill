@@ -4,6 +4,10 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 
 ## 2026-09-15
 
+### Added
+
+- `tests/defects.sh`, the defect list the tests skill's `t.sh falsify` reads: one entry per guard of `obsi.sh`, run against `CHECK_OBSI_NESTED=1 ./check-obsi.sh .`, and every entry is caught or declared unobservable. `check-obsi.sh` now runs every graph query and the `--prop` query in node against the fake vault, which gained an image link, a broken link, a number in an alias list, a tag with a trailing slash and a capitalised tag spelling from `getTags`; it also checks each count's call site, the refusals' own messages, the discovery order and a client that exits non-zero. The stub cuts `search` to its `limit=`, the way the CLI does
+
 ### Changed
 
 - `obsi.sh` prints its help from a heredoc instead of reading its own header back, which under `bash <(…)` is the pipe bash reads the script from and printed nothing; the network, bash and Obsidian claims stay in the header comment and are no longer part of `--help`

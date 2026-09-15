@@ -140,6 +140,32 @@ if [[ -e "$work/launcher-was-run" ]]; then
 fi
 checks=$((checks + 1))
 
+# $OBSIDIAN_CLI names the client the caller chose, so it is asked before either name on PATH,
+# even when another client there answers a version too
+cat >"$work/shadow/obsidian-cli" <<'EOF'
+#!/bin/sh
+echo "1.0.0 (a client the caller did not choose)"
+EOF
+run version
+want_status 0 "\$OBSIDIAN_CLI beside another client"
+want_out "1.13.7" "\$OBSIDIAN_CLI beside another client"
+checks=$((checks + 1))
+
+# Without it, the client is asked before \`obsidian\`: asking the GUI launcher for its version
+# opens a window on a packaged install instead of answering
+cat >"$work/shadow/obsidian-cli" <<EOF
+#!/bin/sh
+exec "$stub" "\$@"
+EOF
+rm -f "$work/launcher-was-run"
+OBSIDIAN_CLI="" run version
+want_status 0 "the client before the launcher"
+if [[ -e "$work/launcher-was-run" ]]; then
+  fail "with no \$OBSIDIAN_CLI the wrapper asked \`obsidian\` before \`obsidian-cli\` — on a packaged install that opens a window"
+fi
+printf '#!/bin/sh\nexit 0\n' >"$work/shadow/obsidian-cli"
+checks=$((checks + 1))
+
 # ---- the dishonest exit status ----------------------------------------------------------
 
 # An application error prints `Error: ` on stdout and exits 0. The wrapper exists to make
@@ -155,6 +181,13 @@ checks=$((checks + 1))
 STUB_JS_ERROR=1 run find anything
 want_status 1 "an error raised inside eval"
 want_out "obsi: nope.md is not a note in the graph" "an error raised inside eval"
+checks=$((checks + 1))
+
+# A client that fails outright — a crash, a signal — exits non-zero, and whatever it printed
+# before that is not an answer. Its own message, on stderr, has to reach the caller
+STUB_CRASH=backlinks run backlinks path=x.md
+want_status 1 "a client exiting non-zero"
+want_out "the client crashed" "a client exiting non-zero"
 checks=$((checks + 1))
 
 # ---- stdin ------------------------------------------------------------------------------
@@ -207,6 +240,10 @@ checks=$((checks + 1))
 run find coastline --limit 1
 want_status 0 "find bounded by --limit"
 want_out "2 more matches" "find bounded by --limit"
+# One row and the notice, not every row and a notice claiming some were held back
+rows=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
+[[ "$rows" == 2 ]] ||
+  fail "find bounded by --limit 1 printed $rows lines instead of one row and the notice: $out"
 checks=$((checks + 1))
 
 run find coastline --limit 99
@@ -246,18 +283,22 @@ export STUB_META=""
 export STUB_SEARCH="No matches found."
 run find nothing
 want_status 0 "find with no matches"
-want_out "No matches found." "find with no matches"
+[[ "$out" == "No matches found." ]] ||
+  fail "find with no matches: expected the sentence No matches found. and nothing else, got: $out"
 checks=$((checks + 1))
 
-# --prop must reach both halves. `search` knows nothing about the filter, so without the
-# second query its rows would arrive unfiltered
-export STUB_META="4	prop	Kept/One.md	status=draft"
+# --prop must reach both halves. `search` knows nothing about the filter and the index query
+# is not told it either, so the allowlist is applied to the rows of each: Dropped/Three.md
+# comes from the index and Dropped/Two.md from the text, and neither may get through
+export STUB_META="4	prop	Kept/One.md	status=draft
+4	prop	Dropped/Three.md	status=done"
 export STUB_SEARCH="Kept/One.md
 Dropped/Two.md"
 export STUB_ALLOWED="Kept/One.md"
 run find draft --prop status=draft
 want_status 0 "--prop filtering both halves"
 want_not_out "Dropped/Two.md" "--prop filtering both halves"
+want_not_out "Dropped/Three.md" "--prop filtering both halves"
 want_out "Kept/One.md" "--prop filtering both halves"
 checks=$((checks + 1))
 unset STUB_ALLOWED
@@ -368,6 +409,22 @@ if grep -q 'code=' "$STUB_LOG"; then
 fi
 checks=$((checks + 1))
 
+# Every count goes through that validator, each at its own call site, and a leading zero or
+# a zero is refused with the rest: 010 is octal 8 in the app's sloppy-mode scope, and 0
+# answers zero rows as though that were what was asked
+for args in "graph hubs 010" "graph hubs 0" "graph ends app" "graph unresolved app" \
+  "graph components 3 app" "find x --limit 010"; do
+  read -ra words <<<"$args"
+  : >"$STUB_LOG"
+  run "${words[@]}"
+  want_status 1 "the count in '$args'"
+  want_out "positive number" "the count in '$args'"
+  if grep -q 'code=' "$STUB_LOG"; then
+    fail "the count in '$args': JavaScript reached the app before the value was refused"
+  fi
+  checks=$((checks + 1))
+done
+
 # The row count of `related` goes through the same validator; an independent review found
 # that removing its check left every test green
 run graph related a.md not-a-number
@@ -395,6 +452,32 @@ checks=$((checks + 1))
 
 run find
 want_status 1 "find with nothing to look for"
+want_out "obsi: find needs something to look for" "find with nothing to look for"
+checks=$((checks + 1))
+
+for args in "find x --limit" "find x --prop" "graph related a.md --tag-max-notes"; do
+  read -ra words <<<"$args"
+  run "${words[@]}"
+  want_status 1 "$args with no value"
+  want_out "obsi: ${args##* } needs" "$args with no value"
+  checks=$((checks + 1))
+done
+
+# A word more than a command takes is refused rather than dropped
+run graph path Sea/A.md Sea/B.md Sea/C.md
+want_status 1 "graph path with three notes"
+want_out "needs two note paths" "graph path with three notes"
+checks=$((checks + 1))
+
+run graph dump "$work/one.json" "$work/two.json"
+want_status 1 "graph dump with two files"
+want_out "takes one file" "graph dump with two files"
+checks=$((checks + 1))
+
+# No command at all is a usage error: the help on stderr, and exit 2
+run
+want_status 2 "no command at all"
+want_out "obsi.sh [--vault NAME] find QUERY" "no command at all"
 checks=$((checks + 1))
 
 # ---- the graph never arrives whole --------------------------------------------------------
@@ -407,6 +490,9 @@ want_not_out "resolvedLinks" "graph dump"
 want_not_out '{"a.md"' "graph dump"
 grep -q '"a.md"' "$work/graph.json" ||
   fail "graph dump wrote no graph to its file: $(cat "$work/graph.json")"
+# Written beside the target and moved over it, so nothing is left behind next to it
+leftover=$(find "$work" -maxdepth 1 -name '.obsi-dump.*')
+[[ -z "$leftover" ]] || fail "graph dump left a temp file beside its target: $leftover"
 checks=$((checks + 1))
 
 # A failed dump must leave the file as it was. The file used to be truncated before the
@@ -416,6 +502,17 @@ STUB_JS_ERROR=1 run graph dump "$work/kept.json"
 want_status 1 "graph dump when the query fails"
 [[ "$(cat "$work/kept.json")" == precious ]] ||
   fail "graph dump when the query fails: the existing file was clobbered — it now holds '$(cat "$work/kept.json")'"
+checks=$((checks + 1))
+
+# Whether the target can be written is asked before the query, so a dump that cannot land
+# never costs the app a whole-graph query
+: >"$STUB_LOG"
+run graph dump "$work/no-such-dir/graph.json"
+want_status 1 "graph dump into a missing folder"
+want_out "cannot write to" "graph dump into a missing folder"
+if grep -q 'code=' "$STUB_LOG"; then
+  fail "graph dump into a missing folder: the graph was queried before the target was checked"
+fi
 checks=$((checks + 1))
 
 # What the client prints on stderr is not part of its answer. Captured together with stdout,
@@ -464,6 +561,12 @@ want_status 1 "selftest when a count differs"
 want_out "differs from Obsidian's own" "selftest when a count differs"
 checks=$((checks + 1))
 
+# And it takes nothing: a word after it is refused rather than dropped
+run selftest extra
+want_status 1 "selftest with an argument"
+want_out "takes no arguments" "selftest with an argument"
+checks=$((checks + 1))
+
 # ---- the JavaScript half, in node against a fake app --------------------------------------
 # The stub saves the code the wrapper hands to eval, exactly as built; node runs it against
 # the made-up vault in tests/fake-app.js. Taking the code from the wrapper rather than from
@@ -483,10 +586,23 @@ answer_of() { # answer_of NAME ARGS... -> $out holds what the app would answer t
   out=$(node "$fake_app" "$work/js/$name.js" 2>&1) || fail "$name: node could not run the query: $out"
 }
 
+eval_of() { # eval_of NAME ARGS... -> $out holds what the app would answer to the call's last eval
+  local name="$1"
+  shift
+  STUB_EVAL_LOG="$work/js/$name.js" run "$@"
+  out=$(node "$fake_app" "$work/js/$name.js" 2>&1) || fail "$name: node could not run the query: $out"
+}
+
+want_answer() { # want_answer EXPECTED WHAT -> the whole answer, not a line of it
+  [[ "$out" == "$1" ]] || fail "$2: expected exactly:"$'\n'"$1"$'\n'"got:"$'\n'"$out"
+}
+
 answer_of value find draft --value
 want_out "4	prop	Sea/Other.md	note=draft" "find --value in node"
 want_out "4	prop	Sea/Coastlines.md	status=draft" "find --value in node"
 want_not_out "	name	" "find --value in node"
+# Aliases and tags are read by their own markers, never a second time as property values
+want_not_out "tags=" "find --value in node"
 checks=$((checks + 1))
 
 answer_of scoped find draft --value --prop status
@@ -517,20 +633,117 @@ answer_of mixed-aliases find upper --alias
 want_out "Sea/Tagged.md" "a mixed-case key in node"
 checks=$((checks + 1))
 
+# Naming no field means every field, property values among them
+answer_of default find draft
+want_out "4	prop	Sea/Other.md	note=draft" "a plain find in node"
+checks=$((checks + 1))
+
+# An exact name outranks a partial one, and a note matching in two fields scores for both:
+# "coastline" is part of the name Coastlines and of the alias "coastline, shore"
+answer_of name-exact find coastlines --name
+want_answer "10	name	Sea/Coastlines.md	Coastlines" "an exact name in node"
+answer_of name-alias find coastline --name --alias
+want_answer "11	name+alias	Sea/Coastlines.md	Coastlines" "a name and an alias in node"
+checks=$((checks + 1))
+
+# A field scores once, at its best match: Template carries draft inline, as the frontmatter
+# Draft and inside draft/idea, and that is one tag match, not three
+answer_of best-per-field find draft --tag
+want_answer "4	tag	Sea/Template.md	#draft" "one field scored once in node"
+checks=$((checks + 1))
+
+# --prop is asked of the app on its own, and its answer is the allowlist both halves are held
+# to: a value names the notes holding it, a bare name every note that has the property, and a
+# list property is matched item by item
+eval_of prop-value find draft --prop status=draft
+want_answer "Sea/Coastlines.md" "--prop status=draft in node"
+eval_of prop-name find draft --prop status
+want_answer "Sea/Coastlines.md
+Sea/Other.md" "--prop status in node"
+eval_of prop-list find draft --prop tags=Draft
+want_answer "Sea/Template.md" "--prop on a list property in node"
+checks=$((checks + 1))
+
+# The graph queries against the fake vault's links: Smith links to Coastlines, to Tagged and
+# to an image, Other links to Tagged and to a note that does not exist, and the rest link
+# nowhere and are linked from nowhere
+eval_of summary graph summary
+want_answer "notes	7
+links between notes	3
+links to attachments	1
+unresolved links	1
+nothing links to them	5
+they link nowhere	5
+connected components	4
+largest component	4" "graph summary in node"
+checks=$((checks + 1))
+
+eval_of hubs graph hubs 1
+want_answer "2	Sea/Tagged.md
+…	1	more linked-to notes" "graph hubs in node"
+checks=$((checks + 1))
+
+eval_of ends graph ends 1
+want_answer "no-incoming	Sea/Ignored.md
+no-incoming	… and 4 more
+no-outgoing	Sea/Coastlines.md
+no-outgoing	… and 4 more" "graph ends in node"
+checks=$((checks + 1))
+
+eval_of components graph components 2 2
+want_answer "4	Sea/Coastlines.md | Sea/Other.md | … and 2 more
+1	Sea/Ignored.md
+…	2 more components" "graph components in node"
+checks=$((checks + 1))
+
+# A path follows links the way they are written: Smith reaches Tagged, and nothing is
+# reachable from Coastlines, which links nowhere, though Smith links to it
+eval_of path graph path Sea/Smith.md Sea/Tagged.md
+want_answer "Sea/Smith.md
+Sea/Tagged.md" "graph path in node"
+eval_of no-path graph path Sea/Coastlines.md Sea/Tagged.md
+want_answer "No path found." "graph path against the links' direction in node"
+eval_of path-nowhere graph path Sea/Smith.md Sea/Nowhere.md
+want_answer "Error: Sea/Nowhere.md is not a note in the graph" "graph path to a note not in the graph in node"
+checks=$((checks + 1))
+
+eval_of unresolved graph unresolved
+want_answer "Missing note	Sea/Other.md	1" "graph unresolved in node"
+checks=$((checks + 1))
+
 # graph related compares tags without their `#`, from either place: Tagged carries x in its
 # frontmatter as "#x", Lone carries it inline, and nothing links the two
-STUB_EVAL_LOG="$work/js/related.js" run graph related Sea/Tagged.md --tag-max-notes 5
-out=$(node "$fake_app" "$work/js/related.js" 2>&1) || fail "related: node could not run the query: $out"
+eval_of related graph related Sea/Tagged.md --tag-max-notes 5
 want_out "1	tag	Sea/Lone.md" "graph related in node"
+checks=$((checks + 1))
+
+# The whole answer: Smith links to Coastlines as well as to Tagged, so Coastlines is
+# co-cited; Lone and Ignored share a tag with Tagged; Smith and Other, which link to it, are
+# left to backlinks. With no --tag-max-notes a tag counts while it is on at most five notes
+# here, the floor of the default
+eval_of related-default graph related Sea/Tagged.md
+want_answer "2	co-cited	Sea/Coastlines.md
+1	tag	Sea/Ignored.md
+1	tag	Sea/Lone.md" "graph related with the default tag ceiling in node"
+checks=$((checks + 1))
+
+# y is on three notes, so a ceiling of two leaves x alone as a signal
+eval_of related-ceiling graph related Sea/Tagged.md --tag-max-notes 2
+want_answer "2	co-cited	Sea/Coastlines.md
+1	tag	Sea/Lone.md" "graph related under --tag-max-notes in node"
+checks=$((checks + 1))
+
+# Smith and Other both link to Tagged, which is the same argument read from the other end
+eval_of related-shares graph related Sea/Smith.md
+want_answer "2	shares-links	Sea/Other.md" "graph related sharing links in node"
 checks=$((checks + 1))
 
 # selftest sums the vault's tags the way find reads them, under getTags' own counting rules,
 # and has to land on exactly the count Obsidian writes out by hand in tests/fake-app.js —
-# nested parents, one tag in two cases, a placeholder and a number that are no tags, and an
-# excluded file all included
-STUB_EVAL_LOG="$work/js/selftest.js" run selftest
-out=$(node "$fake_app" "$work/js/selftest.js" 2>&1) || fail "selftest: node could not run the query: $out"
-want_out "tags agree with Obsidian's own count (5 tags)" "selftest in node on a vault that agrees"
+# nested parents, one tag in two cases, a trailing slash, a placeholder and a number that are
+# no tags, an excluded file, and a merged tag Obsidian spells capitalised all included
+eval_of selftest selftest
+want_out "tags agree with Obsidian's own count (6 tags)" "selftest in node on a vault that agrees"
 checks=$((checks + 1))
 
 # And when Obsidian counts differently — the drift selftest exists to notice — every tag

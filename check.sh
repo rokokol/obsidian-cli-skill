@@ -35,7 +35,7 @@ cd "$HERE"
 
 # One source of truth for what gets linted. A second copy of this list drifts, and a
 # drifted list lies about what was checked.
-scripts=(check.sh check-sh.sh check-skill.sh check-pins.sh check-changelog.sh check-interface.sh vendor-sync.sh check-obsi.sh obsi.sh tests/stub-cli.sh)
+scripts=(check.sh check-sh.sh check-skill.sh check-pins.sh check-changelog.sh check-interface.sh vendor-sync.sh check-obsi.sh obsi.sh tests/stub-cli.sh tests/defects.sh)
 skill_name=obsidian-cli
 
 fail() {

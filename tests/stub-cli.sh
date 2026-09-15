@@ -14,8 +14,10 @@
 #   STUB_META     what an `eval` carrying find's metadata query returns, before `=> `
 #   STUB_META_FILE the same from a file, for a payload too big for the environment
 #   STUB_ALLOWED  what an `eval` carrying the --prop allowlist query returns
-#   STUB_SEARCH   what `search` returns
+#   STUB_SEARCH   what `search` returns, cut to its `limit=` the way the CLI cuts it
 #   STUB_ERROR    a command name that must answer `Error: …` at exit 0
+#   STUB_CRASH    a command name that must fail the way a crashing client does: part of an
+#                 answer on stdout, its message on stderr, exit 3
 #   STUB_JS_ERROR make every eval return `=> Error: …`, which the CLI calls success
 #   STUB_EVAL     what any other eval returns, before `=> ` (default: ok)
 #   STUB_STDERR   a line every eval also writes to stderr, the way a runtime warning would
@@ -57,6 +59,12 @@ if [ -n "${STUB_ERROR:-}" ] && [ "$command_word" = "$STUB_ERROR" ]; then
   exit 0
 fi
 
+if [ -n "${STUB_CRASH:-}" ] && [ "$command_word" = "$STUB_CRASH" ]; then
+  echo "partial answer"
+  echo "the client crashed" >&2
+  exit 3
+fi
+
 case "$command_word" in
   version)
     echo "1.13.7 (installer 1.13.4)"
@@ -88,7 +96,18 @@ case "$command_word" in
     esac
     ;;
   search)
-    printf '%s\n' "${STUB_SEARCH:-No matches found.}"
+    # The CLI answers at most `limit=` files, so a caller that asks for fewer sees fewer
+    limit=""
+    for arg in "$@"; do
+      case "$arg" in
+        limit=*) limit="${arg#limit=}" ;;
+      esac
+    done
+    if [ -n "$limit" ]; then
+      printf '%s\n' "${STUB_SEARCH:-No matches found.}" | awk -v n="$limit" 'NR <= n'
+    else
+      printf '%s\n' "${STUB_SEARCH:-No matches found.}"
+    fi
     ;;
   *)
     # Everything else echoes what it was given, so a pass-through test can see the argv

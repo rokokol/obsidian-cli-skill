@@ -8,9 +8,11 @@
 // The vault below is small and made up, and every note is there for one question:
 //
 //   Sea/Coastlines.md  aliases as ONE string holding a comma; two properties saying "draft"
-//   Sea/Smith.md       an alias LIST whose item holds a comma; `tags: a, b` as a string
+//   Sea/Smith.md       an alias LIST whose item holds a comma, and a number Obsidian drops;
+//                      `tags: a, b` as a string; a link to an image, which is no note
 //   Sea/Tagged.md      mixed-case `Tags` and `Aliases` keys; a tag item holding a space
-//   Sea/Other.md       "draft" in a property other than status; an inline tag
+//   Sea/Other.md       "draft" in a property other than status; an inline tag; a tag
+//                      written with a trailing slash; a link to a note that does not exist
 //   Sea/Lone.md        linked to nothing, sharing only an inline tag with Tagged
 //   Sea/Template.md    a nested tag, the same tag in two cases, a template placeholder
 //                      and a number, which Obsidian's own count treats each its own way
@@ -29,9 +31,9 @@ const fs = require('fs')
 
 const cache = {
   'Sea/Coastlines.md': { frontmatter: { aliases: 'coastline, shore', status: 'draft', owner: 'draft team' } },
-  'Sea/Smith.md': { frontmatter: { aliases: ['Smith, John', 'Plain'], tags: 'a, b' }, tags: [{ tag: '#inline' }] },
+  'Sea/Smith.md': { frontmatter: { aliases: ['Smith, John', 'Plain', 2024], tags: 'a, b' }, tags: [{ tag: '#inline' }] },
   'Sea/Tagged.md': { frontmatter: { Tags: ['#x', 'y', 'two words'], Aliases: 'Upper case' } },
-  'Sea/Other.md': { frontmatter: { status: 'done', note: 'draft' }, tags: [{ tag: '#y' }] },
+  'Sea/Other.md': { frontmatter: { status: 'done', note: 'draft', tags: ['done/'] }, tags: [{ tag: '#y' }] },
   'Sea/Lone.md': { frontmatter: {}, tags: [{ tag: '#x' }] },
   'Sea/Template.md': { frontmatter: { tags: ['draft/idea', 'Draft', 'y{{date:YYYY}}', '123'] }, tags: [{ tag: '#draft' }] },
   'Sea/Ignored.md': { frontmatter: {}, tags: [{ tag: '#y' }] }
@@ -39,9 +41,10 @@ const cache = {
 
 // Every occurrence counts and a nested tag counts toward its parent too: #draft/idea is one
 // #draft/idea and one #draft, and with the inline #draft and the frontmatter Draft — one tag
-// in two cases — #draft comes to 3. The placeholder and the number are no tags at all to
-// Obsidian's count, and the excluded file is not counted
-const obsidianTags = { '#inline': 1, '#x': 2, '#y': 2, '#draft/idea': 1, '#draft': 3 }
+// in two cases — #draft comes to 3, kept in the spelling Obsidian happened to meet first,
+// which here is the capitalised one. done/ counts as #done. The placeholder and the number
+// are no tags at all to Obsidian's count, and the excluded file is not counted
+const obsidianTags = { '#inline': 1, '#x': 2, '#y': 2, '#draft/idea': 1, '#Draft': 3, '#done': 1 }
 if (process.env.FAKE_GETTAGS === 'drift') obsidianTags['#x'] = 3
 const files = Object.keys(cache).map(path => ({ path, basename: path.replace(/^.*\//, '').replace(/\.md$/, '') }))
 
@@ -55,7 +58,7 @@ global.app = {
     getTags: () => Object.assign({}, obsidianTags),
     isUserIgnored: path => path === 'Sea/Ignored.md',
     resolvedLinks: {
-      'Sea/Smith.md': { 'Sea/Coastlines.md': 1, 'Sea/Tagged.md': 1 },
+      'Sea/Smith.md': { 'Sea/Coastlines.md': 1, 'Sea/Tagged.md': 1, 'Sea/map.png': 1 },
       'Sea/Other.md': { 'Sea/Tagged.md': 1 },
       'Sea/Coastlines.md': {},
       'Sea/Tagged.md': {},
@@ -63,7 +66,7 @@ global.app = {
       'Sea/Template.md': {},
       'Sea/Ignored.md': {}
     },
-    unresolvedLinks: {}
+    unresolvedLinks: { 'Sea/Other.md': { 'Missing note': 1 } }
   }
 }
 
