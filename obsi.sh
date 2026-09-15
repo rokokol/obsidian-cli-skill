@@ -16,6 +16,13 @@ die() {
   exit 1
 }
 
+# usage_error MESSAGE -> exit 2. Asked wrongly is a different failure from an answer that
+# says no, and a caller branching on the status has to tell a typo from a missing note
+usage_error() {
+  printf 'obsi: %s\n' "$1" >&2
+  exit 2
+}
+
 # need_count VALUE... -> nothing, or exit. Every count here is spliced into JavaScript that
 # runs inside the live app, so anything but a plain positive integer is refused before any
 # of it is built. Unchecked, `graph hubs app` answered "No links found." at exit 0 — `app`
@@ -24,7 +31,7 @@ die() {
 need_count() {
   local value
   for value in "$@"; do
-    [[ "$value" =~ ^[1-9][0-9]*$ ]] || die "expected a positive number, not '$value'"
+    [[ "$value" =~ ^[1-9][0-9]*$ ]] || usage_error "expected a positive number, not '$value'"
   done
 }
 
@@ -583,7 +590,7 @@ graph() {
       answer graph_unresolved "${1:-40}"
       ;;
     related)
-      [[ $# -ge 1 ]] || die "graph related needs a note path, exactly as the vault spells it"
+      [[ $# -ge 1 ]] || usage_error "graph related needs a note path, exactly as the vault spells it"
       related_note="$1"
       shift
       related_rows=10
@@ -591,14 +598,14 @@ graph() {
       while (($#)); do
         case "$1" in
           --tag-max-notes)
-            (($# >= 2)) || die "--tag-max-notes needs a number: how many notes a tag may be on and still count as a signal, 0 to ignore tags entirely"
+            (($# >= 2)) || usage_error "--tag-max-notes needs a number: how many notes a tag may be on and still count as a signal, 0 to ignore tags entirely"
             related_tags="$2"
             shift 2
             ;;
           # An unrecognised flag must not be swallowed as a row count. Taking it silently is
           # the CLI's own habit — the one this wrapper exists to stop — and it turned
           # `--tags 0` into "show zero rows" without a word
-          -*) die "unknown option '$1' — graph related takes a row count and --tag-max-notes" ;;
+          -*) usage_error "unknown option '$1' — graph related takes a row count and --tag-max-notes" ;;
           *)
             related_rows="$1"
             shift
@@ -611,21 +618,21 @@ graph() {
       # own sentinel for the default and is set below, never taken from a caller
       if [[ -n "$related_tags" ]]; then
         [[ "$related_tags" =~ ^(0|[1-9][0-9]*)$ ]] ||
-          die "--tag-max-notes takes zero or a positive number, not '$related_tags'"
+          usage_error "--tag-max-notes takes zero or a positive number, not '$related_tags'"
       else
         related_tags=-1
       fi
       answer graph_related "$related_note" "$related_rows" "$related_tags"
       ;;
     path)
-      [[ $# -eq 2 ]] || die "graph path needs two note paths, exactly as the vault spells them"
+      [[ $# -eq 2 ]] || usage_error "graph path needs two note paths, exactly as the vault spells them"
       answer graph_path "$1" "$2"
       ;;
     dump)
-      [[ $# -le 1 ]] || die "graph dump takes one file, or none for graph.json"
+      [[ $# -le 1 ]] || usage_error "graph dump takes one file, or none for graph.json"
       graph_dump "${1:-graph.json}"
       ;;
-    *) die "unknown graph query '$what' — see obsi.sh --help" ;;
+    *) usage_error "unknown graph query '$what' — see obsi.sh --help" ;;
   esac
 }
 
@@ -688,7 +695,7 @@ $(selftest_js)
 while (($#)); do
   case "$1" in
     --vault)
-      (($# >= 2)) || die "--vault needs a name"
+      (($# >= 2)) || usage_error "--vault needs a name"
       prefix=("vault=$2")
       shift 2
       ;;
@@ -717,7 +724,7 @@ cmd="$1"
 shift
 case "$cmd" in
   find)
-    (($#)) || die "find needs something to look for"
+    (($#)) || usage_error "find needs something to look for"
     query="$1"
     shift
     limit=20
@@ -737,16 +744,16 @@ case "$cmd" in
           shift
           ;;
         --prop)
-          (($# >= 2)) || die "--prop needs NAME or NAME=VALUE"
+          (($# >= 2)) || usage_error "--prop needs NAME or NAME=VALUE"
           prop="$2"
           shift 2
           ;;
         --limit)
-          (($# >= 2)) || die "--limit needs a number"
+          (($# >= 2)) || usage_error "--limit needs a number"
           limit="$2"
           shift 2
           ;;
-        *) die "unknown option '$1' — see obsi.sh --help" ;;
+        *) usage_error "unknown option '$1' — see obsi.sh --help" ;;
       esac
     done
     need_count "$limit"
@@ -762,7 +769,7 @@ case "$cmd" in
     ;;
   graph) graph "$@" ;;
   selftest)
-    (($# == 0)) || die "selftest takes no arguments"
+    (($# == 0)) || usage_error "selftest takes no arguments"
     answer self_test
     ;;
   *)
@@ -773,7 +780,7 @@ case "$cmd" in
     command_word=""
     for arg in "$cmd" "$@"; do
       if [[ -n "$command_word" && ("$arg" == vault=* || "$arg" == --vault) ]]; then
-        die "the vault goes before the command word: obsi.sh --vault NAME $command_word …"
+        usage_error "the vault goes before the command word: obsi.sh --vault NAME $command_word …"
       fi
       [[ -n "$command_word" || "$arg" == vault=* ]] || command_word="$arg"
     done

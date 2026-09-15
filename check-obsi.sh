@@ -362,32 +362,34 @@ checks=$((checks + 1))
 unset STUB_ALLOWED STUB_CODE_LOG
 
 # ---- arguments the wrapper rejects --------------------------------------------------------
+# Asked wrongly is exit 2, apart from 1, which is an answer from the CLI or the vault: a caller
+# branching on the status has to tell a typo from a note that is not there
 
 run find x --limit abc
-want_status 1 "a non-numeric --limit"
+want_status 2 "a non-numeric --limit"
 want_out "positive number" "a non-numeric --limit"
 checks=$((checks + 1))
 
 run find x --nonsense
-want_status 1 "an unknown find option"
+want_status 2 "an unknown find option"
 checks=$((checks + 1))
 
 run graph nonsense
-want_status 1 "an unknown graph query"
+want_status 2 "an unknown graph query"
 want_out "unknown graph query" "an unknown graph query"
 checks=$((checks + 1))
 
 # The JavaScript behind `related` cannot run against a stub, but the argument it refuses to
 # work without can: without a note it would otherwise send `undefined` into the app
 run graph related
-want_status 1 "graph related with no note"
+want_status 2 "graph related with no note"
 want_out "needs a note path" "graph related with no note"
 checks=$((checks + 1))
 
 # An option it does not know must be refused, not taken as a row count. Swallowing an
 # unknown argument is the CLI's own habit and the reason this wrapper exists
 run graph related "a.md" --no-such-flag 3
-want_status 1 "an unknown option to graph related"
+want_status 2 "an unknown option to graph related"
 want_out "unknown option" "an unknown option to graph related"
 checks=$((checks + 1))
 
@@ -396,13 +398,13 @@ checks=$((checks + 1))
 # silently coerced to zero rows; the crafted value below would have run as code
 : >"$STUB_LOG"
 run graph hubs app
-want_status 1 "a row count that names something in the app's scope"
+want_status 2 "a row count that names something in the app's scope"
 want_out "positive number" "a row count that names something in the app's scope"
 checks=$((checks + 1))
 
 : >"$STUB_LOG"
 run graph hubs '5, (function(){throw new Error("injected")})()'
-want_status 1 "a hostile row count"
+want_status 2 "a hostile row count"
 # Refusing is not enough on its own: nothing may have been sent to the app first
 if grep -q 'code=' "$STUB_LOG"; then
   fail "a hostile row count: JavaScript reached the app before the value was refused"
@@ -417,7 +419,7 @@ for args in "graph hubs 010" "graph hubs 0" "graph ends app" "graph unresolved a
   read -ra words <<<"$args"
   : >"$STUB_LOG"
   run "${words[@]}"
-  want_status 1 "the count in '$args'"
+  want_status 2 "the count in '$args'"
   want_out "positive number" "the count in '$args'"
   if grep -q 'code=' "$STUB_LOG"; then
     fail "the count in '$args': JavaScript reached the app before the value was refused"
@@ -428,49 +430,49 @@ done
 # The row count of `related` goes through the same validator; an independent review found
 # that removing its check left every test green
 run graph related a.md not-a-number
-want_status 1 "a non-numeric row count to graph related"
+want_status 2 "a non-numeric row count to graph related"
 want_out "positive number" "a non-numeric row count to graph related"
 checks=$((checks + 1))
 
 # The vault belongs before the command word. After it the CLI drops it in silence and
 # answers for whichever vault is open, so the wrapper has to refuse it instead
 run backlinks path=note.md total --vault "Other Vault"
-want_status 1 "--vault after the command word"
+want_status 2 "--vault after the command word"
 want_out "before the command word" "--vault after the command word"
 checks=$((checks + 1))
 
 run backlinks path=note.md vault=Other
-want_status 1 "vault= after the command word"
+want_status 2 "vault= after the command word"
 want_out "before the command word" "vault= after the command word"
 checks=$((checks + 1))
 
 # A missing value answers in the tool's own voice, not bash's `line N: 2: …`
 run --vault
-want_status 1 "--vault with no name"
+want_status 2 "--vault with no name"
 want_out "obsi: --vault needs a name" "--vault with no name"
 checks=$((checks + 1))
 
 run find
-want_status 1 "find with nothing to look for"
+want_status 2 "find with nothing to look for"
 want_out "obsi: find needs something to look for" "find with nothing to look for"
 checks=$((checks + 1))
 
 for args in "find x --limit" "find x --prop" "graph related a.md --tag-max-notes"; do
   read -ra words <<<"$args"
   run "${words[@]}"
-  want_status 1 "$args with no value"
+  want_status 2 "$args with no value"
   want_out "obsi: ${args##* } needs" "$args with no value"
   checks=$((checks + 1))
 done
 
 # A word more than a command takes is refused rather than dropped
 run graph path Sea/A.md Sea/B.md Sea/C.md
-want_status 1 "graph path with three notes"
+want_status 2 "graph path with three notes"
 want_out "needs two note paths" "graph path with three notes"
 checks=$((checks + 1))
 
 run graph dump "$work/one.json" "$work/two.json"
-want_status 1 "graph dump with two files"
+want_status 2 "graph dump with two files"
 want_out "takes one file" "graph dump with two files"
 checks=$((checks + 1))
 
@@ -538,7 +540,7 @@ checks=$((checks + 1))
 for value in 010 -1; do
   : >"$STUB_LOG"
   run graph related a.md --tag-max-notes "$value"
-  want_status 1 "--tag-max-notes $value"
+  want_status 2 "--tag-max-notes $value"
   want_out "zero or a positive number" "--tag-max-notes $value"
   if grep -q 'code=' "$STUB_LOG"; then
     fail "--tag-max-notes $value: JavaScript reached the app before the value was refused"
@@ -563,7 +565,7 @@ checks=$((checks + 1))
 
 # And it takes nothing: a word after it is refused rather than dropped
 run selftest extra
-want_status 1 "selftest with an argument"
+want_status 2 "selftest with an argument"
 want_out "takes no arguments" "selftest with an argument"
 checks=$((checks + 1))
 

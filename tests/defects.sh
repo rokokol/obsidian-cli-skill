@@ -164,6 +164,21 @@ EOF
   )" \
   'a refusal raised inside the app — a note not in the graph, a selftest that found drift — prints and exits 0'
 
+defect 'exit/usage-is-2' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+  printf 'obsi: %s\n' "$1" >&2
+  exit 2
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+  printf 'obsi: %s\n' "$1" >&2
+  exit 1
+EOF
+  )" \
+  'every usage error exits 1, the same as an answer from the CLI or the vault, and a caller cannot tell a typo from a note that is not there'
+
 defect 'answer/empty' 'obsi.sh' \
   "$(
     cat <<'EOF'
@@ -179,7 +194,7 @@ defect 'count/validator-body' 'obsi.sh' \
   "$(
     cat <<'EOF'
   for value in "$@"; do
-    [[ "$value" =~ ^[1-9][0-9]*$ ]] || die "expected a positive number, not '$value'"
+    [[ "$value" =~ ^[1-9][0-9]*$ ]] || usage_error "expected a positive number, not '$value'"
   done
 EOF
   )" \
@@ -292,16 +307,16 @@ defect 'related/tag-max-default' 'obsi.sh' \
 defect 'related/tag-max-needs-value' 'obsi.sh' \
   "$(
     cat <<'EOF'
-(($# >= 2)) || die "--tag-max-notes needs a number
+(($# >= 2)) || usage_error "--tag-max-notes needs a number
 EOF
   )" \
-  'true || die "--tag-max-notes needs a number' \
+  'true || usage_error "--tag-max-notes needs a number' \
   "--tag-max-notes with no value ends in bash's own unbound-variable error instead of saying what it needs"
 
 defect 'related/unknown-option' 'obsi.sh' \
   "$(
     cat <<'EOF'
--*) die "unknown option '$1' — graph related takes a row count and --tag-max-notes" ;;
+-*) usage_error "unknown option '$1' — graph related takes a row count and --tag-max-notes" ;;
 EOF
   )" \
   '-*) shift ;;' \
@@ -310,21 +325,21 @@ EOF
 defect 'related/needs-note' 'obsi.sh' \
   "$(
     cat <<'EOF'
-[[ $# -ge 1 ]] || die "graph related needs a note path
+[[ $# -ge 1 ]] || usage_error "graph related needs a note path
 EOF
   )" \
-  'true || die "graph related needs a note path' \
+  'true || usage_error "graph related needs a note path' \
   "graph related with no note ends in bash's unbound-variable error instead of saying it needs a path"
 
 defect 'path/two-notes' 'obsi.sh' \
   "$(
     cat <<'EOF'
-[[ $# -eq 2 ]] || die "graph path needs two
+[[ $# -eq 2 ]] || usage_error "graph path needs two
 EOF
   )" \
   "$(
     cat <<'EOF'
-[[ $# -ge 2 ]] || die "graph path needs two
+[[ $# -ge 2 ]] || usage_error "graph path needs two
 EOF
   )" \
   'graph path with a third note answers for the first two and drops the third without a word'
@@ -332,10 +347,10 @@ EOF
 defect 'dump/one-file' 'obsi.sh' \
   "$(
     cat <<'EOF'
-[[ $# -le 1 ]] || die "graph dump takes one file
+[[ $# -le 1 ]] || usage_error "graph dump takes one file
 EOF
   )" \
-  'true || die "graph dump takes one file' \
+  'true || usage_error "graph dump takes one file' \
   'graph dump with two files writes the first and silently ignores the second'
 
 defect 'dump/asked-first' 'obsi.sh' \
@@ -377,7 +392,7 @@ EOF
 defect 'graph/unknown-query' 'obsi.sh' \
   "$(
     cat <<'EOF'
-*) die "unknown graph query '$what' — see obsi.sh --help" ;;
+*) usage_error "unknown graph query '$what' — see obsi.sh --help" ;;
 EOF
   )" \
   '*) answer graph_summary ;;' \
@@ -391,10 +406,10 @@ defect 'selftest/dispatched' 'obsi.sh' \
 defect 'selftest/no-args' 'obsi.sh' \
   "$(
     cat <<'EOF'
-(($# == 0)) || die "selftest takes no arguments"
+(($# == 0)) || usage_error "selftest takes no arguments"
 EOF
   )" \
-  'true || die "selftest takes no arguments"' \
+  'true || usage_error "selftest takes no arguments"' \
   'words after selftest are dropped in silence, the CLI habit the wrapper exists to stop'
 
 # ---- the wrapper's own arguments --------------------------------------------------------------
@@ -415,10 +430,10 @@ EOF
 defect 'args/vault-needs-name' 'obsi.sh' \
   "$(
     cat <<'EOF'
-(($# >= 2)) || die "--vault needs a name"
+(($# >= 2)) || usage_error "--vault needs a name"
 EOF
   )" \
-  'true || die "--vault needs a name"' \
+  'true || usage_error "--vault needs a name"' \
   "--vault with no name ends in bash's unbound-variable error instead of saying it needs a name"
 
 defect 'args/vault-selector' 'obsi.sh' \
@@ -459,16 +474,16 @@ EOF
 defect 'find/needs-query' 'obsi.sh' \
   "$(
     cat <<'EOF'
-(($#)) || die "find needs something to look for"
+(($#)) || usage_error "find needs something to look for"
 EOF
   )" \
-  'true || die "find needs something to look for"' \
+  'true || usage_error "find needs something to look for"' \
   "find with nothing to look for ends in bash's unbound-variable error instead of saying what it needs"
 
 defect 'find/unknown-option' 'obsi.sh' \
   "$(
     cat <<'EOF'
-*) die "unknown option '$1' — see obsi.sh --help" ;;
+*) usage_error "unknown option '$1' — see obsi.sh --help" ;;
 EOF
   )" \
   '*) shift ;;' \
@@ -477,19 +492,19 @@ EOF
 defect 'find/limit-needs-value' 'obsi.sh' \
   "$(
     cat <<'EOF'
-(($# >= 2)) || die "--limit needs a number"
+(($# >= 2)) || usage_error "--limit needs a number"
 EOF
   )" \
-  'true || die "--limit needs a number"' \
+  'true || usage_error "--limit needs a number"' \
   "--limit with no value ends in bash's unbound-variable error instead of saying it needs a number"
 
 defect 'find/prop-needs-value' 'obsi.sh' \
   "$(
     cat <<'EOF'
-(($# >= 2)) || die "--prop needs NAME or NAME=VALUE"
+(($# >= 2)) || usage_error "--prop needs NAME or NAME=VALUE"
 EOF
   )" \
-  'true || die "--prop needs NAME or NAME=VALUE"' \
+  'true || usage_error "--prop needs NAME or NAME=VALUE"' \
   "--prop with no value ends in bash's unbound-variable error instead of saying it needs a name"
 
 defect 'find/value-marker' 'obsi.sh' \
