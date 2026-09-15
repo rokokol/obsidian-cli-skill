@@ -9,6 +9,7 @@
 ![Bash](https://img.shields.io/badge/Bash-4EAA25?style=flat&logo=gnubash&logoColor=white)
 [![license](https://img.shields.io/badge/MIT-3DA639?style=flat)](LICENSE)
 [![ci](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/build.yml/badge.svg)](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/build.yml)
+[![falsify](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/falsify.yml/badge.svg)](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/falsify.yml)
 
 </div>
 
