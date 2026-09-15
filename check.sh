@@ -1,17 +1,34 @@
 #!/usr/bin/env bash
-# The gate for this repository: lint what it ships, hold the docs to the family's rules,
-# and prove that each check can actually go red. A check that has never failed is a
-# decoration.
-#
-# What this gate cannot cover is the skill's behavioural claims: they need a running
-# Obsidian with a real vault, which no runner has. They carry their measurements instead,
-# so a reader with an app open can falsify them — see references/pitfalls.md.
-#
-# Nothing here touches the network, so it is safe on pull requests.
-# Needs: actionlint, shellcheck, shfmt, node — from the flake's dev shell, never from PATH's luck.
-#
-#   nix develop -c ./check.sh
+# A check that has never failed is a decoration
 set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+The gate for this repository: lints what it ships, holds the docs to the family's rules,
+and proves that each check can actually go red
+
+  check.sh
+
+Cannot cover the skill's behavioural claims: they need a running Obsidian with a real
+vault, which no runner has. They carry their measurements instead, so a reader with an
+app open can falsify them by hand — see references/pitfalls.md
+
+Needs actionlint, shellcheck, shfmt and node, from the flake's dev shell, never from
+PATH's luck
+
+  nix develop -c ./check.sh
+
+Nothing here touches the network, so it is safe on pull requests.
+Exit 0 clean, 1 with `check: <what>` on the first finding
+EOF
+}
+
+case "${1:-}" in
+  -h | --help | help)
+    usage
+    exit 0
+    ;;
+esac
 
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 cd "$HERE"

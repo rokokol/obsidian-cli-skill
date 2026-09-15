@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Nothing here reaches the network. Needs bash 3.2 and POSIX tools only, and a running
-# Obsidian 1.12+ to talk to
+# Needs bash 3.2 and POSIX tools only
 set -euo pipefail
 
 # A nix dev shell exports $out, the build's output path, and bash keeps that export on a
@@ -33,7 +32,7 @@ usage() {
   cat <<'EOF'
 A thin wrapper over the official Obsidian CLI. It adds no commands of its own beyond the
 link graph, and passes everything else through untouched, so `obsi.sh read path=x.md` is
-`obsidian-cli read path=x.md` with the traps handled.
+`obsidian-cli read path=x.md` with the traps handled
 
   obsi.sh [--vault NAME] find QUERY [--name|--alias|--tag|--heading|--body|--value]...
                                    [--prop NAME[=VALUE]] [--limit N]
@@ -45,7 +44,8 @@ The CLI fails quietly in several ways, and each is absorbed here rather than lef
 caller. What they are, why each is handled the way it is, and the measurements behind both
 are in references/obsi.md, and not repeated here
 
-Exit 0 done, 1 when the CLI or the vault answered with an error, 2 on a usage error.
+Nothing here reaches the network; it needs a running Obsidian 1.12+ to talk to.
+Exit 0 done, 1 when the CLI or the vault answered with an error, 2 on a usage error
 EOF
 }
 

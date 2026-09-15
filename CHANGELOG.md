@@ -9,6 +9,7 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 - `obsi.sh` prints its help from a heredoc instead of reading its own header back, which under `bash <(…)` is the pipe bash reads the script from and printed nothing; the network, bash and Obsidian claims stay in the header comment and are no longer part of `--help`
 - the wrong calls the docs show on purpose, `fil=` and `format=` on `aliases`, are excused in `check-interface.allow`, which no agent loads, rather than by a `check-interface: allow` comment in `SKILL.md` and the references, which every invocation loaded; the vendored `check-interface.sh`, `check-skill.sh` and `check-changelog.sh` take their current revisions
 - `check-skill.sh` is vendored from the [skill-authoring](https://github.com/rokokol/skill-authoring-skill) skill, where the rules it checks now live, and reports the rules a skill can break without breaking as warnings on stdout, the exit code unchanged: a `Layout` or install section in runtime, `used to`, a `path:line` citation, a link to a sibling skill, a concrete model id, and the rest its `--help` lists
+- `obsi.sh`'s header now keeps only what an editor needs and its `--help` carries everything a caller acts on, the network and the running-Obsidian facts both, which an entry earlier today left in the header; `check.sh`, the gate, answers `--help` too, with what it needs, the network fact and its exit codes
 
 ## 2026-09-12
 
