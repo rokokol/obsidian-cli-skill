@@ -115,7 +115,9 @@ echo "== the wrapper's shell half behaves, against a fake CLI"
 ./check-obsi.sh .
 
 echo "== the changelog obeys the versioning skill's rules"
-./check-changelog.sh -n CHANGELOG.md
+# Pinned: without -t a changelog moved wholesale to another template stays green, which is
+# the versioning skill's PITFALLS.md
+./check-changelog.sh -n -t '## {date}' CHANGELOG.md
 
 echo "== the skill fits in what an agent loads"
 # A SKILL.md that grows too long stops being the routing layer it is meant to be and becomes
