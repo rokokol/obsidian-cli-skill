@@ -121,8 +121,15 @@ cli() {
 # Without this the wrapper would print an error and exit 0, which is the exact failure it
 # exists to prevent
 js() {
-  local out
+  local out status
+  # cli's refusal has to end js too. js runs inside its caller's $(…), where bash clears
+  # set -e, so unchecked js answered empty at exit 0: find said No matches found, and graph
+  # dump replaced the file it was meant to keep with an empty one. The status is tested as
+  # a statement of its own rather than with `|| exit`: a command left of || runs with set -e
+  # ignored all the way down, which switched off the set -e cli turns back on for itself
   out=$(cli eval code="$1")
+  status=$?
+  ((status == 0)) || exit "$status"
   out="${out#"=> "}"
   case "$out" in
     "Error: "*) die "${out#Error: }" ;;

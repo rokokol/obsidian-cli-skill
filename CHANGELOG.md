@@ -16,6 +16,10 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 - `check-skill.sh` is vendored from the [skill-authoring](https://github.com/rokokol/skill-authoring-skill) skill, where the rules it checks now live, and reports the rules a skill can break without breaking as warnings on stdout, the exit code unchanged: a `Layout` or install section in runtime, `used to`, a `path:line` citation, a link to a sibling skill, a concrete model id, and the rest its `--help` lists
 - `obsi.sh`'s header now keeps only what an editor needs and its `--help` carries everything a caller acts on, the network and the running-Obsidian facts both, which an entry earlier today left in the header; `check.sh`, the gate, answers `--help` too, with what it needs, the network fact and its exit codes
 
+### Fixed
+
+- a refusal the Obsidian CLI prints for the query `obsi.sh` hands to the app no longer ends at exit 0, where `find` said No matches found and `graph dump` replaced an existing file with an empty one: it exits 1 with the CLI's message, like every other refusal
+
 ## 2026-09-12
 
 ### Added

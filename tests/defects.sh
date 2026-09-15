@@ -147,6 +147,15 @@ EOF
   )" \
   'every answer from eval starts with "=> ", and an error raised by the JavaScript exits 0'
 
+defect 'js/cli-refusal-passed-on' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+  ((status == 0)) || exit "$status"
+EOF
+  )" \
+  '  :' \
+  "a refusal the CLI prints for the query is lost inside the caller's command substitution: find says No matches found and graph dump empties the file it was meant to keep, both at exit 0"
+
 defect 'js/error-at-exit-0' 'obsi.sh' \
   "$(
     cat <<'EOF'

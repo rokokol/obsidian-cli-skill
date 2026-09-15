@@ -183,6 +183,15 @@ want_status 1 "an error raised inside eval"
 want_out "obsi: nope.md is not a note in the graph" "an error raised inside eval"
 checks=$((checks + 1))
 
+# An error the CLI itself reports on the query — at exit 0, like any other — has to end the
+# query too. It is raised in cli, inside js, which runs inside its caller's $(…) where bash
+# clears set -e, so js must pass the failure on rather than answer empty
+STUB_ERROR="eval" run find x --name
+want_status 1 "a CLI error on find's query"
+want_out 'obsi: File "nope.md" not found.' "a CLI error on find's query"
+want_not_out "No matches found." "a CLI error on find's query"
+checks=$((checks + 1))
+
 # A client that fails outright — a crash, a signal — exits non-zero, and whatever it printed
 # before that is not an answer. Its own message, on stderr, has to reach the caller
 STUB_CRASH=backlinks run backlinks path=x.md
@@ -504,6 +513,15 @@ STUB_JS_ERROR=1 run graph dump "$work/kept.json"
 want_status 1 "graph dump when the query fails"
 [[ "$(cat "$work/kept.json")" == precious ]] ||
   fail "graph dump when the query fails: the existing file was clobbered — it now holds '$(cat "$work/kept.json")'"
+checks=$((checks + 1))
+
+# The same when the CLI refuses the query rather than the JavaScript: the refusal happens in
+# js's own $(…), and an existing file must still be left as it was
+printf 'precious\n' >"$work/kept-cli.json"
+STUB_ERROR="eval" run graph dump "$work/kept-cli.json"
+want_status 1 "graph dump when the CLI refuses the query"
+[[ "$(cat "$work/kept-cli.json")" == precious ]] ||
+  fail "graph dump when the CLI refuses the query: the file was emptied — it now holds '$(cat "$work/kept-cli.json")'"
 checks=$((checks + 1))
 
 # Whether the target can be written is asked before the query, so a dump that cannot land
