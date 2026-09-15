@@ -1,19 +1,4 @@
 #!/usr/bin/env bash
-# A thin wrapper over the official Obsidian CLI. It adds no commands of its own beyond the
-# link graph, and passes everything else through untouched, so `obsi.sh read path=x.md` is
-# `obsidian-cli read path=x.md` with the traps handled.
-#
-#   obsi.sh [--vault NAME] find QUERY [--name|--alias|--tag|--heading|--body|--value]...
-#                                    [--prop NAME[=VALUE]] [--limit N]
-#   obsi.sh [--vault NAME] graph [summary|hubs|ends|components|related|unresolved|path|dump] [ARGS…]
-#   obsi.sh [--vault NAME] selftest
-#   obsi.sh [--vault NAME] <any CLI command and parameters...>
-#
-# The CLI fails quietly in several ways, and each is absorbed here rather than left to every
-# caller. What they are, why each is handled the way it is, and the measurements behind both
-# are in references/obsi.md, and not repeated here
-#
-# Exit 0 done, 1 when the CLI or the vault answered with an error, 2 on a usage error.
 # Nothing here reaches the network. Needs bash 3.2 and POSIX tools only, and a running
 # Obsidian 1.12+ to talk to
 set -euo pipefail
@@ -44,10 +29,24 @@ need_count() {
   done
 }
 
-# The header, however long it happens to be: a fixed line range drifts the moment someone
-# edits a sentence above, and then --help quietly prints half of itself
 usage() {
-  sed -n '2,/^[^#]/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'
+  cat <<'EOF'
+A thin wrapper over the official Obsidian CLI. It adds no commands of its own beyond the
+link graph, and passes everything else through untouched, so `obsi.sh read path=x.md` is
+`obsidian-cli read path=x.md` with the traps handled.
+
+  obsi.sh [--vault NAME] find QUERY [--name|--alias|--tag|--heading|--body|--value]...
+                                   [--prop NAME[=VALUE]] [--limit N]
+  obsi.sh [--vault NAME] graph [summary|hubs|ends|components|related|unresolved|path|dump] [ARGS…]
+  obsi.sh [--vault NAME] selftest
+  obsi.sh [--vault NAME] <any CLI command and parameters...>
+
+The CLI fails quietly in several ways, and each is absorbed here rather than left to every
+caller. What they are, why each is handled the way it is, and the measurements behind both
+are in references/obsi.md, and not repeated here
+
+Exit 0 done, 1 when the CLI or the vault answered with an error, 2 on a usage error.
+EOF
 }
 
 # ---- reaching the app -----------------------------------------------------------------
