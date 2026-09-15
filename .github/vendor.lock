@@ -3,11 +3,11 @@
 # copy in place: change it at its source and let the weekly cascade bring it back. How it
 # works: references/bump-cascade.md in https://github.com/rokokol/ci-skill
 vendor-sync.sh rokokol/ci-skill templates/vendor-sync.sh 974454004b06e09b0af67485f0781eb87afc3c11 65748845239e8495855de9e11fb36dd633c372c6
-check-pins.sh rokokol/ci-skill templates/check-pins.sh 974454004b06e09b0af67485f0781eb87afc3c11 8c8ce5ad9c45cfc9c1d86b6ef07ec1f2bb241359
-check-changelog.sh rokokol/versioning-skill check-changelog.sh c64d63e19ff63c4fc113e19422131418488093e7 0e45487adf6622d1542b4ad73b9b6fc64c601a23
+check-pins.sh rokokol/ci-skill templates/check-pins.sh 65a870043a54563fe72302de56b9d06ce932adbd f44a172369006a0aae79f4a4f0f1d6e6afde2203
+check-changelog.sh rokokol/versioning-skill check-changelog.sh 8cae74bb044d42acc2034bfa307ee92101f3273d 7e66f60e725546cf28414f93b15230567e511c6e
 .github/workflows/vendor-sync.yml rokokol/ci-skill templates/github/workflows/vendor-sync.yml d55020ab3ca780ea6299336d923b8a3fcb8f491d a5bde77f98d55a43b2c993f4c96a952e0b68010d manual
-check-sh.sh rokokol/bash-best-practices-skill check-sh.sh 7d6e178e524e0ddd87688a523bfeedbef4e1fcd9 378308dace9613c6e24e2a704518e9136c59abab
-check-interface.sh rokokol/ci-skill templates/check-interface.sh 974454004b06e09b0af67485f0781eb87afc3c11 0d82627ed694b7b91ab969c925aa7919ee5976de
-check-skill.sh rokokol/skill-authoring-skill check-skill.sh ff7f0b2694159bc6b3635929c94d2d3de20d958b 1f7ea1b976e91e3f6e00256538902693c7d2ca10
-tests/t.sh rokokol/tests-skill t.sh eb9376c3789e31d0fbada2c1f3480dc740b72371 8857094387e7e808f535d2fbb283ca16a0add26a
+check-sh.sh rokokol/bash-best-practices-skill check-sh.sh 6a6e000c1cf73d3cc01620c075a75fef681fb32e dfcb3826642e10a91add2a34eba00b2825f5b76a
+check-interface.sh rokokol/ci-skill templates/check-interface.sh 65a870043a54563fe72302de56b9d06ce932adbd 23e6b3a4ee1e5a5900e01c88b6c2c3c12a82e58c
+check-skill.sh rokokol/skill-authoring-skill check-skill.sh 1e254e5d132021cbc576bc2dd9a3356dbf377165 5f716f5461af496dd66837427b1c2f40c78537fd
+tests/t.sh rokokol/tests-skill t.sh d6fb20f73a01640e8e0aa3fd88867eeebaa49462 8d4707f2a46d7d59ea5d7e72510b323b04d09f55
 tests/markers/ rokokol/tests-skill markers/ eb9376c3789e31d0fbada2c1f3480dc740b72371 65d141bbf07ecb99a3bd6ebfe4e0d3050a2c1ab4

@@ -1,15 +1,7 @@
 #!/usr/bin/env bash
-# t.sh — the local test harness: one subcommand per question a test run raises.
-#
-# `t.sh help [SUBCOMMAND]` is the reference: every subcommand, every flag, the T_ variables,
-# the exit codes. It is the only list on purpose — this header used to carry a second one,
-# and it fell three subcommands behind the dispatch before anyone noticed.
-# The command is always explicit, after `--`; nothing here guesses what your suite is.
-# A repository keeps its policy — marker sets, excused lines, log directory — in
-# ./tests/t.conf, read from the current directory only, and never the command.
-# Another repository takes this file and markers/ beside it through the ci skill's
-# vendoring cascade (references/bump-cascade.md in https://github.com/rokokol/ci-skill)
-# and never edits its copies in place: a fix belongs in rokokol/tests-skill.
+# The help is the only list on purpose — this header used to carry a second one, and it
+# fell three subcommands behind the dispatch before anyone noticed. A copy is never edited
+# in place: a fix belongs in rokokol/tests-skill
 set -uo pipefail
 
 # 64 is EX_USAGE and 70 is EX_SOFTWARE in sysexits(3): the caller asked wrongly, or the
@@ -1740,8 +1732,7 @@ cmd_prove() {
   esac
 }
 
-# The reference, as text rather than as the file's header: a header has to read as a
-# description of the file, a reference has to be complete, and one text cannot be both.
+# The reference for whoever runs the harness; the header says only what an editor needs.
 # The gate reads every flag out of every parser, every T_ variable out of this file and
 # every exit code out of every return, and requires each to appear here.
 help_general() {
@@ -1772,7 +1763,7 @@ runs the wrong thing on the day it matters. The flags every subcommand forwards 
 A repository keeps its policy in ./tests/t.conf, read from the current directory only and
 never the command: `markers NAME`, `pattern TEXT`, `allow REGEX`, `logdir PATH`, `tests GLOB`.
 An unknown key, a key with no value or a set that does not exist stops the run and names
-the line. Each log or findings directory the harness creates holds a .gitignore of its own.
+the line. Each log or findings directory the harness creates holds a .gitignore of its own
 
 The environment:
 
@@ -1782,8 +1773,11 @@ The environment:
   T_LOGFILE    one log file for one run, instead of a name chosen under the log directory
   T_CONFIG     another policy file; T_CONFIG= (empty) reads none
 
+Another repository takes this file and markers/ beside it through the ci skill's
+vendoring cascade (references/bump-cascade.md in https://github.com/rokokol/ci-skill)
+
 Exit status: CMD's own, passed through unchanged, and the harness's own verdicts in a band
-no test runner uses — `t.sh help codes`.
+no test runner uses — `t.sh help codes`
 EOF
 }
 
@@ -1795,13 +1789,13 @@ Runs CMD once. The status reported is CMD's own — read from PIPESTATUS, never 
 tee that keeps the log — and the log is read even when CMD exited 0, because that is not
 always a success: `collected 0 items`, `no tests ran`, a traceback in a passing run. The
 markers of such a run live in markers/*.txt as data; markers/default.txt always applies,
--m adds a set, -p adds one line.
+-m adds a set, -p adds one line
 
 The kind of verdict — pass, fail or lied — is written beside the log as LOG.verdict, one
-word, so a wrapper can read it without guessing from the number.
+word, so a wrapper can read it without guessing from the number
 
 Exit: CMD's own; 79 when CMD exited 0 but its log says otherwise; 64 for a usage error;
-70 when the log could not be written.
+70 when the log could not be written
 EOF
 }
 
@@ -1811,7 +1805,7 @@ t.sh focused [--any-file] [PATH...]
 
 Finds the modifier that runs one test and skips the rest of its file — `test.only`,
 `it.only`, `describe.only`, and jasmine's `fit` and `fdescribe` — left in the source. PATH
-defaults to the working directory.
+defaults to the working directory
 
   --any-file          look inside node_modules, vendor, third_party, dist, build and
                       target as well, which are skipped by default because somebody
@@ -1820,9 +1814,9 @@ defaults to the working directory.
 No runner reports one. jest and vitest print a skip count, which is what a suite skipping
 a platform test prints too, and both exit 0 — so this cannot be a marker, and a log cannot
 show it. Where the switch lives in a config instead, forbid it there: vitest's
-`allowOnly: false`, playwright's `forbidOnly: true`, eslint's `jest/no-focused-tests`.
+`allowOnly: false`, playwright's `forbidOnly: true`, eslint's `jest/no-focused-tests`
 
-Exit: 0 when the source holds none; 80 when it holds any, with every line named.
+Exit: 0 when the source holds none; 80 when it holds any, with every line named
 EOF
 }
 
@@ -1831,7 +1825,7 @@ help_pollute() {
 t.sh pollute [-l DIR] [-m SET] [-p PATTERN] [-t N] VICTIM -- CMD...
 
 A test that passes alone and fails in the suite was polluted by something that ran before
-it. This halves the order the way bisect halves commits, and names the test that does it.
+it. This halves the order the way bisect halves commits, and names the test that does it
 
 The candidates arrive on stdin, one per line, in the order they run — which is what a
 collector prints:
@@ -1840,16 +1834,16 @@ collector prints:
 
 CMD is given the selection as trailing arguments, so it must be a runner that takes a list
 of tests that way: pytest, vitest, jest, phpunit. `go test -run` takes a regex instead, and
-turning a list into one is a wrapper the adopter writes.
+turning a list into one is a wrapper the adopter writes
 
 Each probe goes through `run`, so a suite that exits 0 while its log says otherwise counts
 as a failure here too. Both ends are checked before any halving: a victim that fails by
 itself is a broken test rather than a polluted one, and a victim that survives the whole
-order has nothing to find.
+order has nothing to find
 
 Exit: 0 when it names the test, or when the order holds nothing to find; 82 when no single
 test explains it and the smallest reproducing set is printed instead; 85 when the victim
-fails on its own.
+fails on its own
 EOF
 }
 
@@ -1859,7 +1853,7 @@ t.sh quarantine [--on YYYY-MM-DD] [FILE]
 
 Reads the quarantine table — `tests/quarantine.md` by default, the shape is in
 references/curation.md — and refuses a row nobody came back to. The columns are found by
-their headings, so a column added in the middle shifts nothing.
+their headings, so a column added in the middle shifts nothing
 
   --on YYYY-MM-DD     judge the rows as of this date rather than today, which is how a
                       gate checks the check without waiting for a deadline to pass
@@ -1867,9 +1861,9 @@ their headings, so a column added in the middle shifts nothing.
 Two rows are refused. One whose `expires` is before the date being judged: the deadline
 was a promise to look again, and it passed. And one whose `expires` is not a date at all,
 because a row that cannot expire never comes up for review — the same silence an unknown
-config key gives.
+config key gives
 
-Exit: 0 when every row is still within its date; 81 when any is not, with each named.
+Exit: 0 when every row is still within its date; 81 when any is not, with each named
 EOF
 }
 
@@ -1879,10 +1873,10 @@ t.sh flaky N [-l DIR] [-m SET] [-p PATTERN] [-t N] -- CMD...
 
 Runs CMD N times, N at least 2, and reports how many runs disagreed with the first, with
 the first divergent log named. Evidence that a test is unstable, never a way to tolerate
-one: nothing here retries, and the logs of every run are kept under one directory.
+one: nothing here retries, and the logs of every run are kept under one directory
 
 Exit: the runs' common status when they agree; 86 when they disagreed; 64 for a usage
-error; 70 when a run produced no verdict at all.
+error; 70 when a run produced no verdict at all
 EOF
 }
 
@@ -1896,15 +1890,15 @@ whose run exited 0 while its log says nothing ran, and one where the runner is n
 A crash of the suite is bad; a Ctrl-C is passed through so git aborts. --first-parent and
 --no-checkout are git's own. The working tree must be clean and no bisect may already be
 in progress; the tree is put back afterwards, interrupt included, and git's session log
-is kept beside the run's logs as bisect.log for `git bisect replay`.
+is kept beside the run's logs as bisect.log for `git bisect replay`
 
 Exit: 0 with the first bad commit named on its own line; 89 when only commits that could
-not answer are left between good and bad; 64 for a usage error; 70 when git failed.
+not answer are left between good and bad; 64 for a usage error; 70 when git failed
 
 t.sh bisect-probe [-b BUILD] [-l DIR] [-m SET] [-p PATTERN] [-t N] -- CMD...
 
 Internal: the single-commit verdict git bisect run calls, in git's vocabulary — 0 good,
-1 bad, 125 cannot answer.
+1 bad, 125 cannot answer
 EOF
 }
 
@@ -1916,7 +1910,7 @@ t.sh falsify [-d FILE] [-b BUILD] [--timeout SECONDS] [--out DIR] [--since REF] 
 
 Breaks one guard at a time, as written by hand in FILE (default tests/defects.sh, see
 templates/defects.sh), and requires the suite to notice. FILTER runs only the defects
-whose name contains it. Nothing is generated, and the defect list is sourced: it is code.
+whose name contains it. Nothing is generated, and the defect list is sourced: it is code
 
   -d FILE             the defect list
   -b BUILD            a command that must succeed before the suite is asked; an edit that
@@ -1940,16 +1934,16 @@ whose name contains it. Nothing is generated, and the defect list is sourced: it
 
 Verdicts: caught, SURVIVED with the file, the line and the edit, expected (declared with
 `expect survived REASON`), stale, unusable, TIMEDOUT. On a GitHub runner each finding is
-also an annotation on its file and line.
+also an annotation on its file and line
 
 A defect list entry may end with `expect survived REASON`, for an edit nothing can
 observe, or `expect caught FRAGMENT`, naming what should do the catching — a test name or
 an assertion message. Caught while FRAGMENT is nowhere in that run's output is stale: the
-suite went red without the named guard being involved, so the run says nothing about it.
+suite went red without the named guard being involved, so the run says nothing about it
 
 Exit: 0 all caught; 83 a survivor; 84 a timeout; 85 the suite red or never really run
 before any edit; 87 the list drifted, or a declared exception was disproved; 88 an edit
-only stopped the build; 64 for a usage error; 70 when a file could not be written back.
+only stopped the build; 64 for a usage error; 70 when a file could not be written back
 EOF
 }
 
@@ -1962,11 +1956,11 @@ to go red: a commit that adds a test and the code it pins has to demonstrate its
 commit's files are split the way falsify splits a defect's file — test files, the policy's
 `tests` among them, stay, the rest is the fix, --any-file counts everything as the fix. The suite must be green with
 the fix in first. A commit other than HEAD is proven in a worktree at that commit;
---worktree does the same for HEAD. -b and --timeout as in falsify.
+--worktree does the same for HEAD. -b and --timeout as in falsify
 
 Exit: 0 proven; 83 VACUOUS, the tests pass without the fix; 84 the suite did not finish;
 85 the suite red or never really run with the fix in; 88 without the fix nothing builds;
-64 when the commit changes no source file, or for any other usage error.
+64 when the commit changes no source file, or for any other usage error
 EOF
 }
 
@@ -1974,7 +1968,7 @@ help_codes() {
   cat <<'EOF'
 Exit status: CMD's own, passed through unchanged, and the harness's own verdicts in a band
 no test runner uses. 2, 3 and 4 were tried first and collide: GNU make exits 2 on any
-error, pytest uses 2 to 5, cargo-nextest exits 4 for "no tests ran".
+error, pytest uses 2 to 5, cargo-nextest exits 4 for "no tests ran"
 
   64  a usage error — a flag, the config, a missing --, an allow regex grep rejects
   70  the harness itself failed — a log it cannot write, a file it cannot put back

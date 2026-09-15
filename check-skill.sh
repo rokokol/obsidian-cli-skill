@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Nothing here reaches the network. Needs bash 3.2 and POSIX tools only, so it runs on a
-# macOS runner unchanged. It has no repo-specific part: another repository takes it through
-# the vendoring cascade (references/bump-cascade.md in https://github.com/rokokol/ci-skill)
-# from https://github.com/rokokol/skill-authoring-skill, never edits its copy in place,
-# and calls it from its own gate. What it accepts is usage() below, and nowhere else
+# Needs bash 3.2 and POSIX tools only, so it runs on a macOS runner unchanged. From
+# https://github.com/rokokol/skill-authoring-skill, never edits its copy in place. There the
+# falsification proves nothing new and repeats in every copy. What it accepts is usage()
+# below, and nowhere else
 set -euo pipefail
 
 usage() {
@@ -13,30 +12,34 @@ loadable at all, that every file under references/ is reachable from SKILL.md by
 following links, and that every relative link and heading anchor in the docs resolves —
 then proves each of those checks able to fail, on throwaway copies of the repository
 with one planted defect each, every time it runs. A check that has never been red is a
-decoration, and a copy of this file is falsified in its own repository on every run.
+decoration, and a copy of this file is falsified in its own repository on every run. It
+has no repo-specific part: another repository takes it through the vendoring cascade
+(references/bump-cascade.md in https://github.com/rokokol/ci-skill) and calls it from
+its own gate
 
   check-skill.sh [--strict] [-n NAME] [DIR]
 
 DIR is the skill's repository (default: the current directory). -n NAME is what the
 readme and the install symlink call the skill, which the frontmatter must agree with.
-Exit 1 with `check-skill: <what>` on the first finding, 2 on a usage error.
+Nothing here reaches the network.
+Exit 1 with `check-skill: <what>` on the first finding, 2 on a usage error
 
 Two tiers. An error is what stops a skill loading or leaves a reference unread, and it
 is the first finding: exit 1, the message on stderr. A warning is a rule of the family
 the skill breaks without breaking: `check-skill: warning: FILE:LINE: ID: what` on
 stdout, the exit code unchanged, and under GITHUB_ACTIONS a ::warning annotation as
 well. --strict turns every warning into a finding: the lines go to stderr too and the
-run exits 1 after the scan.
+run exits 1 after the scan
 
 A line that is right for a reason is excused in check-skill.allow beside SKILL.md, a
 file no agent loads: one entry per line, `ID PATH [TEXT]`, excusing warnings of ID in
 PATH, or only those on lines that contain TEXT when it is given; `#` opens a comment.
 An entry that excuses nothing is an error, like a malformed one: left in place, it
-would silently excuse the next real violation that lands on that path.
+would silently excuse the next real violation that lands on that path
 
 CHECK_SKILL_NESTED=1 skips the self-falsification and runs only the checks. The planted
 copies are run that way, and so should a gate that runs this script inside copies of its
-own repository: there the falsification proves nothing new and repeats in every copy.
+own repository
 
 The warnings, by the id each line carries:
   layout-section     a Layout heading in SKILL.md or a reference: readme content,

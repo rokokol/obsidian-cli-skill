@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Another repository takes it through the ci
-# skill's vendoring cascade (references/bump-cascade.md in https://github.com/rokokol/ci-skill)
-# and never edits its copy in place: a fix belongs in rokokol/versioning-skill
-# Nothing here reaches the network. Needs bash 3.2 and POSIX tools only.
+# Never edits its copy in place: a fix belongs in rokokol/versioning-skill. Needs bash 3.2
+# and POSIX tools only
 set -uo pipefail
 
 usage() {
   cat <<'EOF'
 Decide the machine-checkable half of a changelog. Takes ANY changelog, so it is worth
 more than a review comment: drop it into a repository's own gate and the rules stop
-depending on somebody remembering them.
+depending on somebody remembering them. Another repository takes it through the ci
+skill's vendoring cascade (references/bump-cascade.md in https://github.com/rokokol/ci-skill)
 
   check-changelog.sh [-v VERSION-FILE | -n] [-t TEMPLATE] [CHANGELOG]
 
@@ -66,7 +65,8 @@ a repository stopped shipping versions, numbered above dated where it started, i
 history kept rather than rewritten. A VERSION file puts the numbered ones on top, and -n
 the dated ones
 
-Exit: 0 clean, 1 findings printed, 2 a usage error.
+Nothing here reaches the network.
+Exit: 0 clean, 1 findings printed, 2 a usage error
 EOF
 }
 
