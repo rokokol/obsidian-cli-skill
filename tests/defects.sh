@@ -23,7 +23,8 @@
 defect 'env/out-export' 'obsi.sh' \
   'export -n out err' \
   'export -n err' \
-  'under a nix dev shell a large answer held in "out" is exported to every later command, exec refuses it, and find says No matches found'
+  'under a nix dev shell a large answer held in "out" is exported to every later command, exec refuses it, and find says No matches found' \
+  expect caught 'find under an exported'
 
 defect 'reach/version-shape' 'obsi.sh' \
   '      [0-9]*.[0-9]*)' \
@@ -61,7 +62,8 @@ EOF
         continue
 EOF
   )" \
-  'with the app closed, discovery goes on to run "obsidian", which on a packaged install opens a window instead of answering'
+  'with the app closed, discovery goes on to run "obsidian", which on a packaged install opens a window instead of answering' \
+  expect caught 'went on to run'
 
 defect 'reach/app-down-message' 'obsi.sh' \
   "$(
@@ -98,7 +100,8 @@ EOF
 "$@" 2>"$scratch/stderr")
 EOF
   )" \
-  'every CLI call inside a while-read loop swallows the rest of the list, and the loop quietly does one item'
+  'every CLI call inside a while-read loop swallows the rest of the list, and the loop quietly does one item' \
+  expect caught 'stdin was eaten'
 
 defect 'cli/error-at-exit-0' 'obsi.sh' \
   "$(
@@ -115,7 +118,8 @@ EOF
   ((status == 0))
 EOF
   )" \
-  'a missing note or a bad parameter reported by the app exits 0, and the caller acts on an error message as though it were the answer'
+  'a missing note or a bad parameter reported by the app exits 0, and the caller acts on an error message as though it were the answer' \
+  expect caught 'an application error at exit 0'
 
 defect 'cli/nonzero-status' 'obsi.sh' \
   '((status == 0)) || die' \
@@ -133,7 +137,8 @@ EOF
 [[ -z "$err" ]] || printf '%s\n' "$err"
 EOF
   )" \
-  'a runtime warning from the app lands inside the answer, a dumped graph.json included, and makes it unparseable'
+  'a runtime warning from the app lands inside the answer, a dumped graph.json included, and makes it unparseable' \
+  expect caught 'landed inside the JSON'
 
 defect 'js/prefix' 'obsi.sh' \
   "$(
@@ -172,7 +177,8 @@ EOF
   printf '%s\n' "$out"
 EOF
   )" \
-  'a refusal raised inside the app — a note not in the graph, a selftest that found drift — prints and exits 0'
+  'a refusal raised inside the app — a note not in the graph, a selftest that found drift — prints and exits 0' \
+  expect caught 'an error raised inside eval'
 
 defect 'exit/usage-is-2' 'obsi.sh' \
   "$(
@@ -196,7 +202,8 @@ defect 'answer/empty' 'obsi.sh' \
 EOF
   )" \
   'true || die "the app answered nothing' \
-  'a graph query the app answered with nothing prints a blank line at exit 0, which reads like an answer'
+  'a graph query the app answered with nothing prints a blank line at exit 0, which reads like an answer' \
+  expect caught 'answered with nothing'
 
 # ---- counts spliced into the app's JavaScript ------------------------------------------------
 
@@ -237,7 +244,8 @@ EOF
       answer graph_hubs
 EOF
   )" \
-  'the row count of graph hubs is spliced into the app unchecked, where "app" answers No links found and a crafted value runs as code'
+  'the row count of graph hubs is spliced into the app unchecked, where "app" answers No links found and a crafted value runs as code' \
+  expect caught "a row count that names something in the app's scope"
 
 defect 'count/ends' 'obsi.sh' \
   "$(
@@ -361,7 +369,8 @@ EOF
 [[ "$related_tags" =~ ^-?[0-9]+$ ]] ||
 EOF
   )" \
-  '--tag-max-notes 010 means 8 in the app, and -1 silently means the default'
+  '--tag-max-notes 010 means 8 in the app, and -1 silently means the default' \
+  expect caught '--tag-max-notes 010'
 
 defect 'related/tag-max-default' 'obsi.sh' \
   '        related_tags=-1' \
@@ -451,7 +460,8 @@ EOF
   : >"$target"
 EOF
   )" \
-  'an app that is down turns an existing graph.json into an empty file'
+  'an app that is down turns an existing graph.json into an empty file' \
+  expect caught 'the existing file was clobbered'
 
 defect 'graph/unknown-query' 'obsi.sh' \
   "$(
@@ -465,7 +475,8 @@ EOF
 defect 'selftest/dispatched' 'obsi.sh' \
   '    answer self_test' \
   '    cli selftest' \
-  'selftest goes to the CLI as a command it does not have, and never checks the copied tag rules'
+  'selftest goes to the CLI as a command it does not have, and never checks the copied tag rules' \
+  expect caught 'selftest when the counts agree'
 
 defect 'selftest/no-args' 'obsi.sh' \
   "$(
@@ -489,7 +500,8 @@ EOF
 prefix=(vault= "$2")
 EOF
   )" \
-  'a vault name with a space reaches the CLI as two arguments, it ignores both, and answers for whichever vault is open'
+  'a vault name with a space reaches the CLI as two arguments, it ignores both, and answers for whichever vault is open' \
+  expect caught 'arrived split'
 
 defect 'args/vault-needs-name' 'obsi.sh' \
   "$(
@@ -578,7 +590,8 @@ defect 'find/value-marker' 'obsi.sh' \
 EOF
   )" \
   '          :' \
-  '--value is accepted and dropped, so find --value searches every field instead of property values'
+  '--value is accepted and dropped, so find --value searches every field instead of property values' \
+  expect caught 'its one marker'
 
 defect 'find/default-markers' 'obsi.sh' \
   'markers=" name alias tag prop heading body"' \
@@ -609,7 +622,8 @@ EOF
 [[ -z "$prop" ]] ||
 EOF
   )" \
-  'find --prop status confines the value match to status even without --value, so matches in other properties vanish'
+  'find --prop status confines the value match to status even without --value, so matches in other properties vanish' \
+  expect caught 'confined the value match to the filtered property'
 
 # ---- find: merging, ranking, bounding --------------------------------------------------------
 
@@ -693,7 +707,8 @@ EOF
 body=$body
 EOF
   )" \
-  '--prop filters the index half only, and every text hit comes back unfiltered'
+  '--prop filters the index half only, and every text hit comes back unfiltered' \
+  expect caught '--prop filtering both halves'
 
 defect 'find/merge-adds' 'obsi.sh' \
   "$(
@@ -754,7 +769,8 @@ EOF
 head -n "$limit"
 EOF
   )" \
-  'find over a large result dies of SIGPIPE under pipefail before it can say what it cut'
+  'find over a large result dies of SIGPIPE under pipefail before it can say what it cut' \
+  expect caught 'larger than a pipe buffer'
 
 defect 'find/cut-said' 'obsi.sh' \
   'if ((total > limit)); then' \
@@ -813,19 +829,22 @@ EOF
 if (/^(aliases|tags)$/i.test(k)) continue
 EOF
   )" \
-  'find --value --prop status answers with draft in any property of the note, not in status alone'
+  'find --value --prop status answers with draft in any property of the note, not in status alone' \
+  expect caught 'find --value --prop status in node'
 
 defect 'js-find/prop-marker' 'obsi.sh' \
   "if (on('prop')) for" \
   "if (on('none')) for" \
-  'find --value finds nothing, and a plain find never matches a property value'
+  'find --value finds nothing, and a plain find never matches a property value' \
+  expect caught 'find --value in node'
 
 # ---- Obsidian's reading of tags and aliases, copied ---------------------------------------------
 
 defect 'fm/string-one-item' 'obsi.sh' \
   "if (typeof v === 'string') return [v.trim()]" \
   "if (typeof v === 'string') return v.split(',').map(x => x.trim())" \
-  'aliases: coastline, shore becomes two aliases, which Obsidian itself never makes of it'
+  'aliases: coastline, shore becomes two aliases, which Obsidian itself never makes of it' \
+  expect caught 'a comma string alias in node'
 
 defect 'fm/list-strings-only' 'obsi.sh' \
   "v.filter(x => typeof x === 'string').map(x => x.trim())" \
@@ -835,7 +854,8 @@ defect 'fm/list-strings-only' 'obsi.sh' \
 defect 'fm/list-item-whole' 'obsi.sh' \
   "v.filter(x => typeof x === 'string').map(x => x.trim())" \
   "v.filter(x => typeof x === 'string').flatMap(x => x.split(',')).map(x => x.trim())" \
-  'the alias "Smith, John" becomes two aliases, Smith and John, and an exact search for it finds nothing'
+  'the alias "Smith, John" becomes two aliases, Smith and John, and an exact search for it finds nothing' \
+  expect caught 'a list alias holding a comma in node'
 
 defect 'fm/tags-key-any-case' 'obsi.sh' \
   "$(
@@ -848,7 +868,8 @@ EOF
 fmList(fm, /^tags$/)
 EOF
   )" \
-  'a note with a capitalised Tags key has no tags to find, graph related or selftest, though Obsidian reads them'
+  'a note with a capitalised Tags key has no tags to find, graph related or selftest, though Obsidian reads them' \
+  expect caught 'a mixed-case key in node'
 
 defect 'fm/aliases-key-any-case' 'obsi.sh' \
   "$(
@@ -861,12 +882,14 @@ EOF
 fmList(fm, /^aliases$/)
 EOF
   )" \
-  'a note with a capitalised Aliases key cannot be found by its aliases, though Obsidian reads them'
+  'a note with a capitalised Aliases key cannot be found by its aliases, though Obsidian reads them' \
+  expect caught 'a mixed-case key in node'
 
 defect 'fm/tag-space' 'obsi.sh' \
   ".filter(t => t && !t.includes(' '))" \
   '.filter(t => t)' \
-  'tags: a, b is read as a tag, where Obsidian gives the note no tags at all'
+  'tags: a, b is read as a tag, where Obsidian gives the note no tags at all' \
+  expect caught 'tags: a, b in node'
 
 defect 'fm/tag-hash-once' 'obsi.sh' \
   "t.charAt(0) === '#' ? t : '#' + t" \
@@ -990,7 +1013,8 @@ defect 'related/tag-ceiling' 'obsi.sh' \
 defect 'related/hash-stripped' 'obsi.sh' \
   '.concat(fmTags(fm).map(t => t.slice(1)))' \
   '.concat(fmTags(fm))' \
-  'a frontmatter tag never meets the same tag written inline, so graph related misses what they share'
+  'a frontmatter tag never meets the same tag written inline, so graph related misses what they share' \
+  expect caught 'graph related in node'
 
 defect 'related/self-scored' 'obsi.sh' \
   'linked.add(target)' \
@@ -1007,27 +1031,32 @@ defect 'related/neighbours-scored' 'obsi.sh' \
 defect 'selftest/ignored' 'obsi.sh' \
   'if (app.metadataCache.isUserIgnored(f.path)) continue' \
   'if (false) continue' \
-  "selftest counts the vault's excluded files, which Obsidian does not, and reports drift on every vault that excludes any"
+  "selftest counts the vault's excluded files, which Obsidian does not, and reports drift on every vault that excludes any" \
+  expect caught 'selftest in node on a vault that agrees'
 
 defect 'selftest/invalid' 'obsi.sh' \
   'if (!valid.test(t) || numeric.test(t)) return' \
   'if (numeric.test(t)) return' \
-  'selftest counts a template placeholder as a tag, and reports drift that is not there'
+  'selftest counts a template placeholder as a tag, and reports drift that is not there' \
+  expect caught 'selftest in node on a vault that agrees'
 
 defect 'selftest/numeric' 'obsi.sh' \
   'if (!valid.test(t) || numeric.test(t)) return' \
   'if (!valid.test(t)) return' \
-  'selftest counts a number such as #123 as a tag, which Obsidian does not, and reports drift that is not there'
+  'selftest counts a number such as #123 as a tag, which Obsidian does not, and reports drift that is not there' \
+  expect caught 'selftest in node on a vault that agrees'
 
 defect 'selftest/case' 'obsi.sh' \
   'const k = t.toLowerCase()' \
   'const k = t' \
-  'selftest keeps one tag spelt in two cases apart, and reports drift that is not there'
+  'selftest keeps one tag spelt in two cases apart, and reports drift that is not there' \
+  expect caught 'selftest in node on a vault that agrees'
 
 defect 'selftest/parents' 'obsi.sh' \
   'if (last !== t) count(t.slice(0, t.length - last.length - 1))' \
   'void 0' \
-  'selftest does not count a nested tag toward its parent, and reports drift that is not there'
+  'selftest does not count a nested tag toward its parent, and reports drift that is not there' \
+  expect caught 'selftest in node on a vault that agrees'
 
 defect 'selftest/trailing-slash' 'obsi.sh' \
   "if (t.endsWith('/')) t = t.slice(0, -1)" \
@@ -1042,4 +1071,5 @@ defect 'selftest/theirs-folded' 'obsi.sh' \
 defect 'selftest/reports' 'obsi.sh' \
   'if (rows.length)' \
   'if (false)' \
-  'selftest says the tags agree when they do not, after the Obsidian update it exists to check'
+  'selftest says the tags agree when they do not, after the Obsidian update it exists to check' \
+  expect caught 'selftest in node on a vault that drifted'
