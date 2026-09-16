@@ -129,8 +129,9 @@ grep -q '^[a-z][^ ]* [a-z<]' "$work/declared.txt" || fail "no parameter was read
 
 echo "== the wrapper's shell half behaves, against a fake CLI"
 # The shell half against the stub, and the JavaScript the wrapper builds for find, graph
-# related and selftest run in node against a made-up vault — each with a defect planted per
-# check on every run. What stays measured rather than tested is the real app's index
+# related and selftest run in node against a made-up vault. That each check can fail is
+# tests/defects.sh's job, run by the falsify workflow after a push to master rather than on
+# every run here. What stays measured rather than tested is the real app's index
 ./check-obsi.sh .
 
 echo "== the changelog obeys the versioning skill's rules"

@@ -2,13 +2,11 @@
 # The defect list for this repository, read by the tests skill's harness, vendored beside
 # it, and run by .github/workflows/falsify.yml:
 #
-#   tests/t.sh falsify -- env CHECK_OBSI_NESTED=1 ./check-obsi.sh .
+#   tests/t.sh falsify -- ./check-obsi.sh .
 #
 # Each entry breaks one guard of obsi.sh — its shell half, or the JavaScript it hands to the
-# app's eval — and requires the behaviour suite to notice. CHECK_OBSI_NESTED=1 runs the
-# suite's checks without its own planted-defect pass: that pass plants its edits by pattern
-# into a copy of obsi.sh, so under one of these edits a plant can stop matching and send the
-# run red for a reason that has nothing to do with the defect in flight. The CONSEQUENCE is
+# app's eval — and requires the behaviour suite to notice. This list is the only proof that
+# the suite's checks can fail; the gate does not plant defects of its own. The CONSEQUENCE is
 # what goes wrong in the world when that guard stops working; when an entry survives, that
 # sentence is the report.
 #

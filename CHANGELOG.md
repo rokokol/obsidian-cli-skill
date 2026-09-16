@@ -2,6 +2,13 @@
 
 Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dated rather than numbered, and with no `Unreleased` section — this repository is read at whatever revision you have checked out, so whatever is on the default branch is what every reader already has
 
+## 2026-09-16
+
+### Changed
+
+- `check-obsi.sh` no longer plants its own defects into copies of `obsi.sh`: every one of them has an entry in `tests/defects.sh` held to the same check with `expect caught`, so the gate runs the suite once and `t.sh falsify -- ./check-obsi.sh .` is the proof that its checks can fail, on every push to master. `CHECK_OBSI_NESTED` and `OBSI_UNDER_TEST` are gone
+- `check-obsi.sh` checks that `find --prop` naming a property no note has answers `No matches found.` even when the index and the text both matched, and `obsi.sh` drops the shortcut that was meant to answer it early and never ran
+
 ## 2026-09-15
 
 ### Added

@@ -27,10 +27,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
-      # CHECK_OBSI_NESTED skips check-obsi.sh's own planted-defect pass, which edits copies
-      # of obsi.sh by pattern and would go red under a mutant for reasons of its own
       - name: one shard of the defect list
-        run: nix develop --no-write-lock-file -c ./tests/t.sh falsify --shard "$((SHARD_INDEX + 1))/$SHARD_TOTAL" -- env CHECK_OBSI_NESTED=1 ./check-obsi.sh .
+        run: nix develop --no-write-lock-file -c ./tests/t.sh falsify --shard "$((SHARD_INDEX + 1))/$SHARD_TOTAL" -- ./check-obsi.sh .
         env:
           SHARD_INDEX: ${{ strategy.job-index }}
           SHARD_TOTAL: ${{ strategy.job-total }}

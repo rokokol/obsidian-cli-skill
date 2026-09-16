@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The offline half of the gate: obsi.sh driven against a fake CLI, so the shell half is
-# checked on a runner with no Obsidian. Then — on copies with one defect planted each — it
-# requires this same file to go red for that defect's own reason, because a check nobody has
-# watched fail is a decoration.
+# checked on a runner with no Obsidian. That each check can fail is proved elsewhere:
+# tests/defects.sh breaks one guard of obsi.sh per entry, and the tests skill's t.sh falsify
+# requires this file to go red for each, on every push to master (.github/workflows/falsify.yml)
 #
 #   check-obsi.sh [DIR]
 #
@@ -18,7 +18,6 @@
 # Exit 1 with `check-obsi: <what>` on the first finding, 2 on a usage error.
 set -uo pipefail
 
-self=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")
 root="${1:-.}"
 [[ -d "$root" ]] || {
   echo "check-obsi: $root is not a directory" >&2
@@ -57,7 +56,7 @@ export -n out
 out=""
 status=0
 run() {
-  out=$("$OBSI_UNDER_TEST" "$@" 2>&1)
+  out=$("$obsi" "$@" 2>&1)
   status=$?
   return 0
 }
@@ -80,7 +79,6 @@ want_not_out() { # want_not_out SUBSTRING WHAT
   esac
 }
 
-OBSI_UNDER_TEST="${OBSI_UNDER_TEST:-$obsi}"
 export OBSIDIAN_CLI="$stub"
 
 # A developer's machine has the real client on PATH and an app behind it; a runner has
@@ -206,7 +204,7 @@ checks=$((checks + 1))
 lines=$(printf 'one\ntwo\nthree\n' | {
   n=0
   while IFS= read -r _; do
-    "$OBSI_UNDER_TEST" version >/dev/null 2>&1 || true
+    "$obsi" version >/dev/null 2>&1 || true
     n=$((n + 1))
   done
   printf '%s\n' "$n"
@@ -278,7 +276,7 @@ checks=$((checks + 1))
 # A nix dev shell exports $out, and bash keeps that export on a local of the same name. The
 # 400 KB answer above, held in one, went into the environment of the next command the
 # wrapper ran, exec refused it as "Argument list too long", and find said No matches found
-out_env=$(env out=/nix/store/an-output-path "$OBSI_UNDER_TEST" find common --limit 2 2>&1) || true
+out_env=$(env out=/nix/store/an-output-path "$obsi" find common --limit 2 2>&1) || true
 case "$out_env" in
   *"3998 more matches"*) ;;
   *) fail "find under an exported \$out: $out_env" ;;
@@ -615,8 +613,8 @@ checks=$((checks + 1))
 # ---- the JavaScript half, in node against a fake app --------------------------------------
 # The stub saves the code the wrapper hands to eval, exactly as built; node runs it against
 # the made-up vault in tests/fake-app.js. Taking the code from the wrapper rather than from
-# a copy is what keeps this from drifting: a planted copy of obsi.sh is tested through the
-# very same path
+# a copy is what keeps this from drifting: a defect planted in obsi.sh reaches node through
+# the very same path
 
 command -v node >/dev/null ||
   fail "node is missing — it is pinned in the flake's dev shell, so run this under nix develop"
@@ -798,166 +796,4 @@ want_out "Error: " "selftest in node on a vault that drifted"
 want_out "#x	ours 2	obsidian 3" "selftest in node on a vault that drifted"
 checks=$((checks + 1))
 
-# ---- every check above is able to fail -----------------------------------------------------
-# A copy of obsi.sh with one defect planted must send this same file red. Each defect is one
-# that was actually hit while writing the wrapper, so the suite is pinned to real failures
-# rather than to imagined ones.
-
-if [[ -n "${CHECK_OBSI_NESTED:-}" ]]; then
-  echo "check-obsi: $checks checks passed"
-  exit 0
-fi
-
-planted=0
-
-# The plant expressions below are sed scripts. Where one carries `$limit` or `${2:?…}` it is
-# the wrapper's own text being matched, so it must stay literal — hence the disables
-
-plant() { # plant NAME SED-EXPR -> a copy of obsi.sh with one edit applied
-  local name="$1" expr="$2"
-  local copy="$work/$name.sh"
-  sed "$expr" "$obsi" >"$copy" 2>"$work/$name.sed-err" ||
-    fail "planting '$name' failed: $(cat "$work/$name.sed-err")"
-  # sed can fail after writing, and an expression that silently produced nothing would leave
-  # a copy that fails every check — which reads exactly like a defect the suite caught
-  [[ ! -s "$work/$name.sed-err" ]] ||
-    fail "planting '$name' printed an error: $(cat "$work/$name.sed-err")"
-  chmod +x "$copy"
-  cmp -s "$copy" "$obsi" && fail "planting '$name' changed nothing — the pattern has drifted"
-  bash -n "$copy" 2>/dev/null ||
-    fail "planting '$name' produced a script that does not parse — that is a broken plant, not a defect"
-  printf '%s\n' "$copy"
-}
-
-# A copy has to go red *for its own reason*. Without naming the finding, a plant caught by
-# some unrelated check would still count, and the check it was meant to prove would stay
-# untested while the tally claimed otherwise
-expect_red() { # expect_red COPY WHAT FRAGMENT
-  local copy="$1" what="$2" fragment="$3" nested_out nested_status
-  # On /dev/null: the stub drains any stdin that is not a terminal, as the real client does,
-  # so a copy without the stdin guard would otherwise wait for ever on a stdin that never
-  # ends. The read-loop check supplies its own stdin, and it is what catches that copy
-  nested_out=$(CHECK_OBSI_NESTED=1 OBSI_UNDER_TEST="$copy" "$self" "$root" </dev/null 2>&1)
-  nested_status=$?
-  ((nested_status != 0)) ||
-    fail "a copy with $what passed — nothing here would notice that defect"
-  case "$nested_out" in
-    *"$fragment"*) ;;
-    *) fail "a copy with $what was caught by the wrong check — wanted '$fragment', got: $nested_out" ;;
-  esac
-  planted=$((planted + 1))
-}
-
-# The wrapper must still pass as itself, or the copies prove nothing
-nested_ok=$(CHECK_OBSI_NESTED=1 OBSI_UNDER_TEST="$obsi" "$self" "$root" </dev/null 2>&1) ||
-  fail "the unmodified wrapper failed its own checks: $nested_ok"
-
-# shellcheck disable=SC2016
-expect_red "$(plant no-stdin-guard 's|"\$@" </dev/null 2>"\$scratch/stderr"|"$@" 2>"$scratch/stderr"|')" \
-  "stdin left open on every call" "stdin was eaten"
-
-# One plant per function: the same `case` stands in cli() and in js(), and a plant that
-# neutered both at once never showed that either check works alone
-# shellcheck disable=SC2016
-expect_red "$(plant no-error-check-cli '/^cli() {$/,/^}$/s|"Error: "\*) die.*|"Error: "*) : ;;|')" \
-  "the CLI's Error: prefix no longer turned into a failure" "an application error at exit 0"
-
-# shellcheck disable=SC2016
-expect_red "$(plant no-error-check-js '/^js() {$/,/^}$/s|"Error: "\*) die.*|"Error: "*) : ;;|')" \
-  "an Error: raised inside eval no longer turned into a failure" "an error raised inside eval"
-
-# shellcheck disable=SC2016
-expect_red "$(plant dump-truncates-first 's/^graph_dump() {$/graph_dump() { : >"$1";/')" \
-  "graph dump emptying its file before the query has answered" "the existing file was clobbered"
-
-# shellcheck disable=SC2016
-expect_red "$(plant stderr-in-answer '/printf .%s\\n. "\$err" >&2/s/.*/  [[ -z "$err" ]] || out="$err$out"/')" \
-  "the client's stderr folded into its answer" "landed inside the JSON"
-
-expect_red "$(plant empty-answer-passes '/the app answered nothing/s/.*/  :/')" \
-  "an empty reply from the app printed as a blank answer" "answered with nothing"
-
-expect_red "$(plant value-not-a-marker '/^        --value)$/,/;;$/s/markers=.*/:/')" \
-  "--value accepted and dropped instead of narrowing to property values" "its one marker"
-
-# shellcheck disable=SC2016
-expect_red "$(plant scope-always 's/^    scope=""$/    scope="${prop%%=*}"/')" \
-  "--prop confining the value match even without --value" "confined the value match to the filtered property"
-
-# The JavaScript half, one plant per question the fake vault asks
-expect_red "$(plant js-prop-marker-off "s/if (on('prop')) for/if (on('none')) for/")" \
-  "the index query ignoring the property-value marker" "find --value in node"
-
-expect_red "$(plant js-scope-dropped '/if (scope ? k !== scope/s/scope ? k !== scope : //')" \
-  "the index query dropping the --value scope" "find --value --prop status in node"
-
-expect_red "$(plant js-string-split "s/return \[v.trim()\]/return v.split(',').map(x => x.trim())/")" \
-  "a frontmatter string split on commas" "a comma string alias in node"
-
-expect_red "$(plant js-list-split '/typeof x === .string./s/\.map(x => x\.trim())/.flatMap(x => x.split(",")).map(x => x.trim())/')" \
-  "a frontmatter list item split on commas" "a list alias holding a comma in node"
-
-expect_red "$(plant js-tag-spaces-kept '/const fmTags/s/ \&\& !t\.includes(. .)//')" \
-  "a tag holding a space kept as a tag" "tags: a, b in node"
-
-# shellcheck disable=SC2016
-expect_red "$(plant js-keys-case-sensitive 's|/^aliases$/i|/^aliases$/|; s|/^tags$/i|/^tags$/|')" \
-  "the tags and aliases keys matched in one case only" "a mixed-case key in node"
-
-expect_red "$(plant js-related-hash 's/fmTags(fm).map(t => t.slice(1))/fmTags(fm)/')" \
-  "graph related comparing a frontmatter #x with an inline x" "graph related in node"
-
-expect_red "$(plant selftest-passes-through '/^  selftest)$/,/^    ;;$/d')" \
-  "selftest handed to the CLI as an unknown command" "selftest when the counts agree"
-
-# selftest's counting, one plant per rule of getTags it has to reproduce
-expect_red "$(plant js-selftest-no-parents '/if (last !== t) count/d')" \
-  "selftest not counting a nested tag toward its parent" "selftest in node on a vault that agrees"
-
-expect_red "$(plant js-selftest-invalid-counted 's/if (!valid.test(t) || numeric.test(t)) return/if (numeric.test(t)) return/')" \
-  "selftest counting a tag Obsidian refuses, such as a template placeholder" "selftest in node on a vault that agrees"
-
-expect_red "$(plant js-selftest-numbers-counted 's/if (!valid.test(t) || numeric.test(t)) return/if (!valid.test(t)) return/')" \
-  "selftest counting a number as a tag" "selftest in node on a vault that agrees"
-
-expect_red "$(plant js-selftest-case-sensitive 's/const k = t.toLowerCase()/const k = t/')" \
-  "selftest keeping one tag in two cases apart" "selftest in node on a vault that agrees"
-
-expect_red "$(plant js-selftest-ignored-counted '/isUserIgnored(f.path)) continue/d')" \
-  "selftest counting the vault's excluded files" "selftest in node on a vault that agrees"
-
-expect_red "$(plant js-selftest-silent 's/^if (rows.length)$/if (false)/')" \
-  "selftest that never reports a difference" "selftest in node on a vault that drifted"
-
-expect_red "$(plant out-stays-exported '/^export -n out err$/d')" \
-  "an exported \$out from the caller left on the wrapper's own locals" "find under an exported"
-
-expect_red "$(plant tag-max-octal '/related_tags" =~/s/=~ .* ]]/=~ ^(-1|[0-9]+)$ ]]/')" \
-  "--tag-max-notes taking a leading zero and the default's sentinel" "--tag-max-notes 010"
-
-# shellcheck disable=SC2016
-expect_red "$(plant head-not-awk 's|awk -v n="\$limit" .NR <= n.|head -n "$limit"|')" \
-  "the truncation notice bounded with head, which dies of SIGPIPE under pipefail" \
-  "larger than a pipe buffer"
-
-# shellcheck disable=SC2016
-expect_red "$(plant unquoted-vault 's|prefix=("vault=\$2")|prefix=(vault= "$2")|')" \
-  "a vault name split into two arguments" "arrived split"
-
-expect_red "$(plant no-empty-sentence 's|echo "No matches found."|echo ""|')" \
-  "an empty result printed as empty output rather than as a sentence" "find with no matches"
-
-expect_red "$(plant no-prop-filter '/grep -Fxf/s/.*/      :/')" \
-  "--prop applied to the index half only, leaving the body half unfiltered" \
-  "--prop filtering both halves"
-
-expect_red "$(plant hubs-unvalidated '/^    hubs)$/,/;;$/s/need_count.*/:/')" \
-  "the row count of graph hubs spliced into JavaScript without being checked" \
-  "a row count that names something in the app's scope"
-
-# shellcheck disable=SC2016
-expect_red "$(plant probes-on '/unreachable="\$candidate"/{n;s/break/continue/;}')" \
-  "discovery probing on after a client reported the app down" \
-  "went on to run"
-
-echo "check-obsi: $checks checks passed, $planted planted defects caught"
+echo "check-obsi: $checks checks passed"
