@@ -284,10 +284,6 @@ return Object.keys(hits).map(p => {
   if [[ -n "$prop" ]]; then
     local allow="$scratch/allowed.txt"
     allowed_by_prop "$prop" >"$allow"
-    if [[ ! -s "$allow" ]]; then
-      echo "No matches found."
-      return
-    fi
     meta=$(printf '%s\n' "$meta" | awk -F'\t' 'NR == FNR { a[$0]; next } $3 in a' "$allow" -)
     [[ -z "$body" ]] ||
       body=$(printf '%s\n' "$body" | grep -Fxf "$allow" || true)

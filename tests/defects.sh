@@ -654,19 +654,6 @@ defect 'find/capped-floor' 'obsi.sh' \
   '> limit * 3))' \
   'a text search that filled its cap exactly is reported as a complete count of what was left out, not a floor'
 
-defect 'find/prop-empty-shortcut' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-    if [[ ! -s "$allow" ]]; then
-      echo "No matches found."
-      return
-    fi
-EOF
-  )" \
-  '    :' \
-  'find --prop naming a property no note has goes on to filter both streams instead of answering at once' \
-  expect survived 'an empty allowlist makes the awk and the grep below keep nothing too, so the answer is the same sentence; the shortcut saves work and changes nothing a caller sees'
-
 defect 'find/empty-sentence' 'obsi.sh' \
   "$(
     cat <<'EOF'
@@ -709,6 +696,20 @@ EOF
   )" \
   '--prop filters the index half only, and every text hit comes back unfiltered' \
   expect caught '--prop filtering both halves'
+
+defect 'find/prop-none-kept' 'obsi.sh' \
+  "$(
+    cat <<'EOF'
+"$allow" || true)
+EOF
+  )" \
+  "$(
+    cat <<'EOF'
+"$allow" || printf '%s\n' "$body")
+EOF
+  )" \
+  'find --prop naming a property no note has answers with every text hit, unfiltered, instead of No matches found' \
+  expect caught 'find --prop naming a property no note has'
 
 defect 'find/merge-adds' 'obsi.sh' \
   "$(

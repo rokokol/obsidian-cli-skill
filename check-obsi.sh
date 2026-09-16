@@ -310,6 +310,15 @@ want_not_out "Dropped/Two.md" "--prop filtering both halves"
 want_not_out "Dropped/Three.md" "--prop filtering both halves"
 want_out "Kept/One.md" "--prop filtering both halves"
 checks=$((checks + 1))
+
+# A property no note has leaves nothing through either half, however much the index and the
+# text matched: the answer is the empty result's sentence, not the unfiltered rows
+export STUB_ALLOWED=""
+run find draft --prop nosuch
+want_status 0 "find --prop naming a property no note has"
+[[ "$out" == "No matches found." ]] ||
+  fail "find --prop naming a property no note has: expected the sentence No matches found. and nothing else, got: $out"
+checks=$((checks + 1))
 unset STUB_ALLOWED
 
 # A text search that hit its own cap makes the count of what was left out a floor, and the
