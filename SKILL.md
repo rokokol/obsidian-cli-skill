@@ -81,7 +81,7 @@ Prefer the CLI over editing files directly: it goes through the app, so the inde
 
 - [`references/commands.md`](references/commands.md) — output shape, counting semantics and one worked example per command group, all measured on a live vault. What `help` does not tell you
 - [`references/pitfalls.md`](references/pitfalls.md) — every trap above with its reproduction, plus setup problems and the places the official documentation and the local build disagree
-- [`references/obsi.md`](references/obsi.md) — the wrapper in full: every `find` and `graph` flag, how results are scored, and what each query cannot see
+- [`references/obsi.md`](references/obsi.md) — the wrapper in full: the traps it absorbs, how `find` ranks what it returns, what each `graph` query can and cannot see, and the measurements behind its defaults. The flags themselves are in `obsi.sh --help`, which sends the reader here rather than repeating it
 - [`references/plugin-dev.md`](references/plugin-dev.md) — the reload, errors, console and inspect loop for a plugin or theme, with what `help` leaves out
 
 This skill covers the CLI only. How a particular vault's notes are written and organised — style, indexes, icons, diagrams, its own tooling — is set by the vault's own instructions, when they exist. Before writing, inspect both the instructions the harness offered and the vault-local instruction directories it uses; a policy absent from the loaded list may still exist on disk. Do not invent vault rules where none exist
