@@ -37,8 +37,13 @@ with `-h | --help | help)` and a `*)` arm that sends usage to stderr, flag arms 
 help printed from a heredoc or by a `help [SUB]` subcommand, and a header comment that
 lists nothing. They are spelled out in references/shape.md and help.md of
 https://github.com/rokokol/bash-best-practices-skill. A header line claiming "Needs bash
-3.2" turns on a grep for constructs newer than 3.2 or absent from a BSD userland; a grep
-is a proxy, and the proof is a run under the real 3.2
+X.Y" turns on a grep for constructs newer than that floor, and "POSIX tools only" one for
+flags a BSD userland lacks or reads another way; a grep is a proxy, and the proof is a run
+under the bash the claim names
+
+CHECK_SH_NESTED=1 runs the checks and skips the self-test. The self-test runs itself that
+way, and so should a gate that calls this script more than once in one run: the copy and
+its tools are the same for every call, so proving it again proves nothing new
 
 Nothing here reaches the network
 Exit 0 when everything agrees, 1 with one `check-sh: <what>` line per finding, 2 on a
@@ -296,11 +301,15 @@ trap 'rm -rf "$work"' EXIT
 # help text or a template inside one carries dispatchers, flag rows and exit lines of its
 # own, which are not this script's. The opening line stays, since it can carry code. A
 # `<<WORD` opens a heredoc only outside quotes and comments: read inside a string as an
-# opener, it blanked the rest of the file. With 1 as the second argument the inside of
-# every single-quoted string is blanked too, for the proxy grep: such a string runs
-# nothing, so a construct it names is none of the script's. Quotes are tracked across
-# lines, since an awk or sed program spans several
-mask_code() { # mask_code FILE 0|1 -> FILE with heredoc bodies, and single-quoted text when 1, blanked
+# opener, it blanked the rest of the file. With 1 the inside of every single-quoted string
+# is blanked too: single quotes suppress every expansion, so what they hold runs nothing
+# and a construct named there is none of the script's. With 2 double-quoted text goes as
+# well, and that copy is for the command-shaped patterns alone — a `declare -A` inside a
+# message is prose, and a gate proving a bash is 3.2 has to write it. The expansion-shaped
+# patterns keep reading double quotes, because `echo "${v,,}"` is a use and not a mention:
+# double quotes suppress nothing. Quotes are tracked across lines, since an awk or sed
+# program spans several
+mask_code() { # mask_code FILE 0|1|2 -> heredoc bodies, single-quoted text at 1, double too at 2
   awk -v sq="$2" '
     inhd {
       line = $0
@@ -316,13 +325,13 @@ mask_code() { # mask_code FILE 0|1 -> FILE with heredoc bodies, and single-quote
       for (i = 1; i <= n; i++) {
         c = substr($0, i, 1)
         if (q == "\047") {
-          if (c == "\047") { q = ""; out = out c } else out = out (sq ? " " : c)
+          if (c == "\047") { q = ""; out = out c } else out = out (sq >= 1 ? " " : c)
           continue
         }
         if (q == "\"") {
-          if (c == "\\") { out = out substr($0, i, 2); i++; continue }
-          if (c == "\"") q = ""
-          out = out c
+          if (c == "\\") { out = out (sq >= 2 ? "  " : substr($0, i, 2)); i++; continue }
+          if (c == "\"") { q = ""; out = out c; continue }
+          out = out (sq >= 2 ? " " : c)
           continue
         }
         if (c == "\\") { out = out substr($0, i, 2); i++; continue }
@@ -414,12 +423,30 @@ open_set=0
 proxy_only=0
 {
   header=$(sed -n '2,/^[^#]/p' "$script" | sed '$d')
-  claims_32=0
-  ! printf '%s\n' "$header" | grep -q 'Needs bash 3\.2' || claims_32=1
+  # The floor the header declares, as one number: 3.2 is 302, 4.3 is 403, no claim is 0.
+  # Any version is read rather than 3.2 alone, so a tool that needs 4.3 is still held to
+  # what arrived after it and nothing earlier
+  # Every text here reaches its reader through <<<, never through a pipe: a `grep -q` that
+  # finds its match closes the pipe, and the producer's next write dies of SIGPIPE, which
+  # `pipefail` then makes the pipeline's status (shape.md, pitfalls.md)
+  # `|| :` because a header with no claim is the ordinary case, and a grep that finds
+  # nothing exits 1, which pipefail would make the substitution's status and -e would act on
+  claim=$(grep -oE 'Needs bash [0-9]+(\.[0-9]+)?' <<<"$header" | sed -n 1p || :)
+  floor=0
+  [[ -z "$claim" ]] ||
+    floor=$(awk -v v="${claim#Needs bash }" 'BEGIN { n = split(v, p, "."); print p[1] * 100 + (n > 1 ? p[2] : 0) }')
+  # The userland is a second claim and an independent one: bash 5 from brew or nix with a
+  # BSD sed around it is an ordinary macOS machine, and its flags are the ones that differ
+  posix_tools=0
+  ! grep -q 'POSIX tools only' <<<"$header" || posix_tools=1
   code="$work/code"
   mask_code "$script" 0 >"$code"
   code_sq="$work/code_sq"
   mask_code "$script" 1 >"$code_sq"
+  # A third copy with double-quoted text blanked as well, for the patterns that look for a
+  # command rather than an expansion: see mask_code's comment for why the two differ
+  code_dq="$work/code_dq"
+  mask_code "$script" 2 >"$code_dq"
 
   # The dispatcher: the top-level `case "$cmd" in` … `esac`, one arm per subcommand,
   # `a | b)` split into two. The help arm and the refusal arms are not subcommands.
@@ -439,9 +466,12 @@ proxy_only=0
     # the helper it calls, which no grep can see
     refusal=$(printf '%s\n' "$dispatch" | sed -n '/^  \([^)]* | \)\{0,1\}\*)/,/;;/p')
     [[ -n "$refusal" ]] || finding "$name's dispatcher has no *) arm to refuse an unknown subcommand"
-    [[ -z "$refusal" ]] || ! printf '%s\n' "$refusal" | grep -E '(^|[^[:alnum:]_])usage([^[:alnum:]_]|$)' | grep -qv '>&2' ||
+    usage_rows=$(grep -E '(^|[^[:alnum:]_])usage([^[:alnum:]_]|$)' <<<"$refusal" || :)
+    # Not <<<"" on an empty list: a here-string of nothing is still one empty line, which
+    # `grep -v` matches, and the finding would fire on an arm with no usage at all
+    [[ -z "$usage_rows" ]] || ! grep -qv '>&2' <<<"$usage_rows" ||
       finding "$name's *) arm prints its usage to stdout rather than stderr"
-    ! printf '%s\n' "$refusal" | grep -q '# pass-through' || open_set=1
+    ! grep -q '# pass-through' <<<"$refusal" || open_set=1
   fi
 
   # The flags: every `-x | --long)` arm, attributed to the cmd_<sub>() function it sits
@@ -470,15 +500,16 @@ proxy_only=0
   # If its header claims bash 3.2 the proxy below is still worth running, and it is all
   # that runs; with no claim either there is nothing to check, which is a refusal
   if ((${#subs[@]} + ${#flags[@]} == 0)); then
-    ((claims_32)) ||
-      die "nothing to check in $script: no case \"\$cmd\" dispatcher, no flag arms and no bash 3.2 claim — see references/shape.md"
+    ((floor || posix_tools)) ||
+      die "nothing to check in $script: no case \"\$cmd\" dispatcher, no flag arms and no bash floor or POSIX userland claim — see references/shape.md"
     proxy_only=1
   fi
   # The help arm is spelled one way, so a reader and a completion can count on all three.
   # A wrapper passes `help` through to the tool behind it, whose help is the better one,
   # so it may answer -h and --help as flags before the dispatcher instead
-  if [[ -n "$dispatch" ]] && ! printf '%s\n' "$dispatch" | grep -qE '^  -h \| --help \| help\)'; then
-    if ! { ((open_set)) && printf '%s\n' "${flags[@]+"${flags[@]}"}" | grep -qx -- $'-\t--help'; }; then
+  if [[ -n "$dispatch" ]] && ! grep -qE '^  -h \| --help \| help\)' <<<"$dispatch"; then
+    flag_rows=$(printf '%s\n' "${flags[@]+"${flags[@]}"}")
+    if ! { ((open_set)) && grep -qx -- $'-\t--help' <<<"$flag_rows"; }; then
       finding "$name's dispatcher has no -h | --help | help arm"
     fi
   fi
@@ -508,26 +539,80 @@ known_flag() { # known_flag FLAG [SUB] -> 0 when SUB (or any parser) accepts it,
 # rejects, which is why the claim is proven by a run under /bin/bash on a macOS runner
 # and this is only the cheap first look. It runs before the help is asked for, since
 # under a real 3.2 a script holding such a construct may not parse at all
-if ((claims_32)); then
-  bash4='\[\[[^]]*[-]v [A-Za-z_]|mapfil[e] |readarra[y] |declar[e] -A|loca[l] -A|declar[e] -n|loca[l] -n'
-  bash4="$bash4"'|\$\{[A-Za-z_]+,[,]\}|\$\{[A-Za-z_]+\^[\^]\}|\$\{[A-Za-z_]+@[QEPAaKk]\}|;;[&]|[^|]\|[&][^&]|wai[t] -n'
-  # A negative length, a descriptor named by a variable, a fractional read timeout, globstar
-  bash4="$bash4"'|\$\{[A-Za-z_][A-Za-z0-9_]*:[^}:]*:[-][0-9]|(^|[^$])[{][A-Za-z_][A-Za-z0-9_]*[}][<>]|rea[d] [^;|&]*-t ?[0-9]*[.][0-9]|globsta[r]'
-  # Parsed by both, read two ways: 3.2 keeps a quoted replacement's quotes, 5.2 reads & as
-  # the match
-  bash4="$bash4"'|\$\{[A-Za-z_][A-Za-z0-9_]*//?[^/}]*/["]|\$\{[A-Za-z_][A-Za-z0-9_]*//?[^/}]*/[^}]*[&]'
+# Each row below is the bash a construct needs and the pattern that finds it, and a script
+# is held to the rows *above* the floor it declares: `Needs bash 4.3` is checked for 4.4
+# and 5.2 constructs and left alone about `mapfile`. The floors are bash's own NEWS, and
+# references/portability.md carries the same table in prose, for a reader rather than a grep
+# The middle column says which copy of the code the pattern is read in. `cmd` is a command,
+# which a string only names — `fail "this bash accepts declare -A"` is prose, and a gate
+# proving a bash is 3.2 has to write that sentence — so those are matched where quoted text
+# is blanked. `exp` is an expansion, which double quotes do not suppress: `echo "${v,,}"`
+# lowercases at runtime, so those keep reading inside them
+version_rows() {
+  cat <<'ROWS'
+400	cmd	(^|[^-A-Za-z0-9_])mapfil[e][[:space:]]
+400	cmd	(^|[^-A-Za-z0-9_])readarra[y][[:space:]]
+400	cmd	(^|[^-A-Za-z0-9_])declar[e] -A
+400	cmd	(^|[^-A-Za-z0-9_])loca[l] -A
+400	exp	\$\{[A-Za-z_]+,[,]\}
+400	exp	\$\{[A-Za-z_]+\^[\^]\}
+400	cmd	;;[&]
+400	cmd	[^|]\|[&][^&]
+400	cmd	(^|[^-A-Za-z0-9_])rea[d] [^;|&]*-t ?[0-9]*[.][0-9]
+400	cmd	(^|[^-A-Za-z0-9_])globsta[r]
+401	cmd	(^|[^$])[{][A-Za-z_][A-Za-z0-9_]*[}][<>]
+402	exp	\[\[[^]]*[-]v [A-Za-z_]
+402	exp	\$\{[A-Za-z_][A-Za-z0-9_]*:[^}:]*:[-][0-9]
+403	cmd	(^|[^-A-Za-z0-9_])declar[e] -n
+403	cmd	(^|[^-A-Za-z0-9_])loca[l] -n
+403	cmd	(^|[^-A-Za-z0-9_])wai[t] -n
+404	exp	\$\{[A-Za-z_]+@[QEPAaKk]\}
+502	exp	\$\{[A-Za-z_][A-Za-z0-9_]*//?[^/}]*/["]
+502	exp	\$\{[A-Za-z_][A-Za-z0-9_]*//?[^/}]*/[^}]*[&]
+ROWS
+}
+active_cmd=''
+active_exp=''
+# No claim, no proxy: a script that declares no floor has promised nothing about where it
+# runs, and every construct below would be a finding against a promise nobody made
+if ((floor)); then
+  while IFS="$(printf '\t')" read -r need kind pat; do
+    [[ -n "$need" ]] || continue
+    ((need > floor)) || continue
+    if [[ "$kind" == cmd ]]; then
+      active_cmd="${active_cmd:+$active_cmd|}$pat"
+    else
+      active_exp="${active_exp:+$active_exp|}$pat"
+    fi
+  done <<<"$(version_rows)"
+fi
+# The userland is the other claim, and it stands on its own: bash 5 with a BSD sed around
+# it is a macOS machine, so `POSIX tools only` turns these on whatever the floor says
+if ((posix_tools)); then
   # A bare `mktemp -d` is fine on macOS, whose page says it "behaves as if -t tmp was
   # supplied"; the GNU flags are not, and -t means a prefix there and a template here
   bsd='sor[t] -[A-Za-z]*V|gre[p] -[A-Za-z]*P|readlin[k] -f|dat[e] -d|mktem[p] (-[dqu]+ )*(-[pt]|--tmpdir|--suffix)'
   # sed -i takes a suffix on BSD and none on GNU, so neither spelling runs on both
   bsd="$bsd"'|se[d] (-[A-Za-z]+ )*-[A-Za-z]*i|se[d] [^|;]*--in-plac[e]|gre[p] [^|;]*--exclude-di[r]'
   bsd="$bsd"'|(^|[^-A-Za-z0-9_{$])timeou[t] [0-9]|ta[r] [^|;]*--(wildcard[s]|nul[l])'
-  # Matched in the masked text, shown as the script has it: the line numbers are the same
+  active_cmd="${active_cmd:+$active_cmd|}$bsd"
+fi
+# Matched in the masked text, shown as the script has it: the line numbers are the same
+proxy_hits() { # proxy_hits REGEX CORPUS -> `LINE has: text` for each match outside a comment
+  [[ -n "$1" ]] || return 0
+  grep -nE "$1" "$2" | grep -vE '^[0-9]+:[[:space:]]*#' | cut -d: -f1 |
+    awk 'NR == FNR { want[$1]; next } FNR in want { sub(/^[[:space:]]*/, ""); print FNR " has: " $0 }' - "$code" || :
+}
+if [[ -n "$active_cmd$active_exp" ]]; then
+  claimed="bash ${claim#Needs bash }"
+  [[ -n "$claim" ]] || claimed="a POSIX userland"
   while IFS= read -r hit; do
     [[ -n "$hit" ]] || continue
-    finding "$name claims bash 3.2 but $script:$hit — a proxy grep; the proof is a run under 3.2"
-  done < <(grep -nE "$bash4|$bsd" "$code_sq" | grep -vE '^[0-9]+:[[:space:]]*#' | cut -d: -f1 |
-    awk 'NR == FNR { want[$1]; next } FNR in want { sub(/^[[:space:]]*/, ""); print FNR " has: " $0 }' - "$code" || :)
+    finding "$name claims $claimed but $script:$hit — a proxy grep; the proof is a run under it"
+  done < <({
+    proxy_hits "$active_cmd" "$code_dq"
+    proxy_hits "$active_exp" "$code_sq"
+  } | sort -n -u)
 fi
 
 # ---- a positional parameter guarded by ${N:?} ------------------------------------
@@ -539,6 +624,19 @@ while IFS= read -r hit; do
   finding "$script:$hit — \${N:?} exits 1 with bash's message, where a missing argument is a usage error; guard it with ((\$# >= N)) || die"
 done < <(grep -nE '\$\{[0-9]+:[?]' "$code" | grep -vE '^[0-9]+:[[:space:]]*#' | sed 's/^\([0-9]*\):[[:space:]]*/\1 has: /' || :)
 
+# ---- a producer piped into a reader that stops early ------------------------------
+# `grep -q` at its match, `head` at its line, `sed q` and `awk … exit` all close the pipe
+# and the producer's next write dies of SIGPIPE, which pipefail makes the status of a
+# pipeline that did its job. It is a race rather than a certainty — bash line-buffers
+# stdout, so even a few hundred bytes leave in more than one write, and which write loses
+# is a matter of scheduling — so it survives every local run and fails once in CI
+# (pitfalls.md). The fix is to read the text with <<<, which has no producer to kill
+while IFS= read -r hit; do
+  [[ -n "$hit" ]] || continue
+  finding "$script:$hit — a reader that stops early kills its producer with SIGPIPE, and pipefail makes that the pipeline's status; feed it with <<< instead"
+done < <(grep -nE '[^|]\|[[:space:]]*(gre[p] -[a-zA-Z]*q|hea[d]( |$)|se[d] -n [^|]*[0-9]q|aw[k] [^|]*exi[t])' "$code" |
+  grep -vE '^[0-9]+:[[:space:]]*#' | sed 's/^\([0-9]*\):[[:space:]]*/\1 has: /' || :)
+
 # ---- the header comment lists nothing ---------------------------------------------
 # It says why the script exists and makes the claims; what the script accepts is the
 # help's alone. A second list beside the help falls behind it — t.sh's header did, by
@@ -549,6 +647,17 @@ while IFS= read -r row; do
   finding "$name's header comment carries a line that belongs to the help alone: $row"
 done < <(printf '%s\n' "$header" | sed 's/^# \{0,1\}//' |
   grep -E "^ +(${name_re} |--?[a-zA-Z]|[0-9]+  )|^Exit[ :]+[0-9]|^Environment:" || :)
+
+# ---- the script parses under the bash running this checker -------------------------
+# Running the help would catch a syntax error too, but only for a script that has a
+# dispatcher to run: a plain one, checked by the proxy alone, is never executed. And on a
+# macOS runner this bash is the 3.2 a `Needs bash 3.2` claim is about, so the parse is the
+# cheapest proof that claim has. Nothing below can be trusted about a file bash cannot
+# read, so the help half is skipped once this fires
+if ! parse=$("$BASH" -n "$script" 2>&1); then
+  finding "$name does not parse under the bash running this checker: ${parse##*: }"
+  proxy_only=1
+fi
 
 # ---- the help ---------------------------------------------------------------------
 if ((! proxy_only)); then
@@ -566,7 +675,10 @@ if ((! proxy_only)); then
   # word is skipped as one, since an awk program holds the `;` and `$` that end a match
   if piped=$("$BASH" <(cat "$script") --help 2>&1) && [[ "$piped" != "$help" ]]; then
     self_read='(sed|awk|head|tail|cat|grep|cut)[[:space:]]([^|;&$'"'"']|'"'"'[^'"'"']*'"'"')*"\$\{BASH_SOURC[E](\[0\])?\}"'
-    where=$(grep -nE "$self_read" "$code" | grep -vE '^[0-9]+:[[:space:]]*#' | head -n 1 | sed 's/^\([0-9]*\):[[:space:]]*/ — line \1 has: /' || :)
+    # `sed -n 1s…p` rather than `| head -n 1 |`: head stops reading at its line and the
+    # grep before it dies of SIGPIPE, which pipefail makes the status — swallowed by the
+    # `|| :` here, leaving the line number silently missing from the finding
+    where=$(grep -nE "$self_read" "$code" | grep -vE '^[0-9]+:[[:space:]]*#' | sed -n '1s/^\([0-9]*\):[[:space:]]*/ — line \1 has: /p' || :)
     finding "$name --help prints other text through a pipe than from the file, at exit 0: under bash <(…) it reads its own source${where:-, by a path no grep here can name}; print the help from a heredoc"
   fi
   # Per-subcommand help, where the script has it: `help SUB` for each help_<sub>() it
@@ -587,7 +699,7 @@ if ((! proxy_only)); then
   # help ⇐ dispatcher, and back
   # `NAME sub`, with any bracketed global options between — `NAME [--vault V] sub`
   for s in "${subs[@]+"${subs[@]}"}"; do
-    printf '%s\n' "$help" | grep -qE -- "(^|[^[:alnum:]_./-])${name_re}( \[[^]]*\])* ${s}([^[:alnum:]_-]|\$)" ||
+    grep -qE -- "(^|[^[:alnum:]_./-])${name_re}( \[[^]]*\])* ${s}([^[:alnum:]_-]|\$)" <<<"$help" ||
       finding "$name dispatches '$s' but its help never mentions '$name $s'"
   done
   while IFS= read -r s; do
@@ -635,7 +747,7 @@ if ((! proxy_only)); then
     grep -oE '[0-9]+' | sort -u || :)
   while IFS= read -r n; do
     [[ -n "$n" ]] || continue
-    printf '%s\n' "$codes_listed" | grep -qx -- "$n" ||
+    grep -qx -- "$n" <<<"$codes_listed" ||
       finding "$name exits $n but its help never lists $n on an Exit line"
   done < <(grep -vE '^[[:space:]]*#' "$code" |
     grep -oE '(^|[;{(&|[:space:]])exit [1-9][0-9]*[[:space:]]*(;|&&|\|\||$)' | grep -oE '[0-9]+' | sort -u)
@@ -1025,9 +1137,27 @@ c=$(copy literal-bash4)
 plant "$c" 'HERE=' "note='declar""e -A is bash 4'"
 expect_green "$c" "a copy naming a bash 4 construct inside single quotes" -n script.sh "$c/script.sh"
 
+c=$(copy literal-bash4-double)
+# The same inside double quotes, which is where a message says it: a gate proving a bash
+# is 3.2 has to print the construct's name, and the proxy read that sentence as a use
+plant "$c" 'HERE=' "note=\"this bash accepts declar""e -A\""
+expect_green "$c" "a copy naming a bash 4 construct inside double quotes" -n script.sh "$c/script.sh"
+
 c=$(copy claimed-bash4)
 plant "$c" 'HERE=' 'false && declar'"e -A m"
 expect_red "$c" "claims bash 3.2 but $c/script.sh:" "a bash 4 construct under a 3.2 claim" -n script.sh "$c/script.sh"
+
+c=$(copy unparsable)
+# A file bash cannot read at all: the help run would catch it only where there is a
+# dispatcher to run, and the message would name the help rather than the syntax
+printf 'if then\n' >>"$c/script.sh"
+expect_red "$c" "does not parse under the bash running this checker" "a script with a syntax error" -n script.sh "$c/script.sh"
+
+c=$(copy early-reader)
+# A text piped into a reader that stops early: the spelling is split so this file's own
+# check does not match the line that plants it
+plant "$c" 'HERE=' 'printf "%s\n" here | gre''p -q x || :'
+expect_red "$c" "a reader that stops early kills its producer" "a text piped into grep -q" -n script.sh "$c/script.sh"
 
 c=$(copy claimed-gnu-mktemp)
 # shellcheck disable=SC2016 # the substitution belongs to the script being written out

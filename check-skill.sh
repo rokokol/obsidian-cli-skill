@@ -115,7 +115,10 @@ fail() {
 # and nothing says so: the agent just never reaches for it.
 
 [[ -f SKILL.md ]] || fail "no SKILL.md in $root — there is nothing for an agent to load"
-head -n 1 SKILL.md | grep -qx -- '---' || fail "SKILL.md does not open with a frontmatter block"
+# <<< rather than a pipe even here, where `head` writes its line and leaves nothing to
+# kill: the rule holds for every reader that stops early, and a checker that spells its
+# own exception is a checker nobody can hold to it
+grep -qx -- '---' <<<"$(head -n 1 SKILL.md)" || fail "SKILL.md does not open with a frontmatter block"
 front=$(sed -n '2,/^---$/p' SKILL.md)
 [[ "$(printf '%s\n' "$front" | tail -n 1)" == "---" ]] ||
   fail "SKILL.md's frontmatter is never closed by a second ---"
@@ -139,7 +142,9 @@ front_value() { # front_value KEY -> the scalar, quotes stripped, a block scalar
 }
 
 for key in name description license; do
-  printf '%s\n' "$front" | grep -q "^$key:" ||
+  # <<< rather than a pipe: `grep -q` closes the pipe at its match and the producer's next
+  # write dies of SIGPIPE, which pipefail makes the status of a pipeline that succeeded
+  grep -q "^$key:" <<<"$front" ||
     fail "SKILL.md's frontmatter has no $key — an agent will not load a skill without one"
   [[ -n "$(front_value "$key")" ]] || fail "SKILL.md's frontmatter leaves $key empty"
 done
@@ -464,7 +469,8 @@ done
 desc=$(front_value description)
 triggers="${desc##*Triggers:}"
 if [[ "$triggers" != "$desc" ]]; then
-  dline=$(grep -n '^description:' SKILL.md | head -n 1 | cut -d: -f1)
+  # `sed -n 1s…p` rather than `| head -n 1 |`, which stops reading and kills the grep
+  dline=$(grep -n '^description:' SKILL.md | sed -n '1s/:.*//p')
   # Bytes, not the locale's collation: macOS's uniq compares in it, and there every
   # Cyrillic trigger collates equal to every other of the same word count — PITFALLS.md
   while IFS= read -r dup; do
@@ -772,7 +778,7 @@ expect_quiet "$c" "$p:1: unverified-source" "an excused fetch-failure note"
 
 c=$(copy trigger-twice)
 sed 's/^description:.*/description: "What it is. Use when needed. Triggers: alpha, beta, Alpha."/' SKILL.md >"$c/SKILL.md"
-n=$(grep -n '^description:' "$c/SKILL.md" | head -n 1 | cut -d: -f1)
+n=$(grep -n '^description:' "$c/SKILL.md" | sed -n '1s/:.*//p')
 expect_warn "$c" "SKILL.md:$n: trigger-duplicate: 'alpha'" "a trigger listed twice"
 c=$(copy trigger-twice-excused)
 sed 's/^description:.*/description: "What it is. Use when needed. Triggers: alpha, beta, Alpha."/' SKILL.md >"$c/SKILL.md"

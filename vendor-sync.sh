@@ -132,7 +132,10 @@ fetch() {
 no_symlink() {
   local repo="$1" sha="$2" path="$3" found
   case "$path" in */) ;; *) return 0 ;; esac
-  found=$(git -C "$src" ls-tree -r "$sha:${path%/}" | awk '$1 == "120000" { sub(/^[^\t]*\t/, ""); print; exit }')
+  # The awk reads to the end rather than stopping at the first symlink: an `exit` closes
+  # the pipe, `git ls-tree` dies of SIGPIPE, and pipefail makes 141 the status of a command
+  # that found exactly what it was looking for
+  found=$(git -C "$src" ls-tree -r "$sha:${path%/}" | awk '$1 == "120000" && !seen { sub(/^[^\t]*\t/, ""); print; seen = 1 }')
   [[ -z "$found" ]] || fail "$repo's $path holds a symlink, $found, which a copy cannot keep byte for byte"
 }
 
