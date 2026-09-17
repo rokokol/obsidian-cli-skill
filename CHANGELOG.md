@@ -11,7 +11,7 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 
 ### Changed
 
-- `check.sh` takes `lint`, `behaviour` or `all`, the default: the behaviour half needs only bash and node, so it can run where the lint tools are not. `check-obsi.sh` runs `obsi.sh` under `"$BASH"` rather than through its shebang, which on a macOS runner finds Homebrew's bash 5
+- `check.sh` takes `lint`, `behaviour` or `all`, the default: the behaviour half needs only bash and node, so it can run where the lint tools are not. `check-obsi.sh` runs `obsi.sh` under `"$BASH"` rather than through its shebang, which finds whichever bash is first on PATH, Homebrew's 5 on a Mac that has one
 
 ## 2026-09-16
 

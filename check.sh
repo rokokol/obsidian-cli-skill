@@ -226,7 +226,8 @@ check_behaviour() {
   "$BASH" ./check-obsi.sh .
 
   # obsi.sh claims bash 3.2, and a green run under a 3.2 proves that claim only if the
-  # interpreter was asked: `env bash` on a macOS runner is Homebrew's bash 5. So where
+  # interpreter was asked: `env bash` is whichever bash is first on PATH, Homebrew's 5 on a
+  # Mac that has one. So where
   # CHECK_BASH32 says this is the 3.2 macOS ships, the claim is checked first, and a copy of
   # the wrapper that declares an associative array must fail the suite there
   if [[ -n "${CHECK_BASH32:-}" ]]; then

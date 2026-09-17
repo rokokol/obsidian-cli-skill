@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Needs bash 3.2 and POSIX tools only, and node: it runs under the bash a macOS runner has,
-# and runs obsi.sh under "$BASH" rather than through its shebang, since `env bash` there
-# finds Homebrew's bash 5 and would leave the 3.2 obsi.sh claims unasked
+# and runs obsi.sh under "$BASH" rather than through its shebang, since `env bash` finds
+# whichever bash is first on PATH — Homebrew's 5 on a Mac that has one — and would leave
+# the 3.2 obsi.sh claims unasked
 #
 # That each check can fail is proved elsewhere: tests/defects.sh breaks one guard of obsi.sh
 # per entry, and the tests skill's t.sh falsify requires this file to go red for each, on
