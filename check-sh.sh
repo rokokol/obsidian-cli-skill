@@ -43,7 +43,9 @@ under the bash the claim names
 
 CHECK_SH_NESTED=1 runs the checks and skips the self-test. The self-test runs itself that
 way, and so should a gate that calls this script more than once in one run: the copy and
-its tools are the same for every call, so proving it again proves nothing new
+its tools are the same for every call, so proving it again proves nothing new. The first
+call of every run keeps it: it is what notices a copy that stopped catching defects, and
+the bash and tools under a copy change without the copy changing
 
 Nothing here reaches the network
 Exit 0 when everything agrees, 1 with one `check-sh: <what>` line per finding, 2 on a
@@ -328,6 +330,12 @@ mask_code() { # mask_code FILE 0|1|2 -> heredoc bodies, single-quoted text at 1,
           if (c == "\047") { q = ""; out = out c } else out = out (sq >= 1 ? " " : c)
           continue
         }
+        # $'"'"'...'"'"', where a backslash escapes the quote rather than standing for itself
+        if (q == "$") {
+          if (c == "\\") { out = out (sq >= 1 ? "  " : substr($0, i, 2)); i++; continue }
+          if (c == "\047") { q = ""; out = out c } else out = out (sq >= 1 ? " " : c)
+          continue
+        }
         if (q == "\"") {
           if (c == "\\") { out = out (sq >= 2 ? "  " : substr($0, i, 2)); i++; continue }
           if (c == "\"") { q = ""; out = out c; continue }
@@ -336,6 +344,7 @@ mask_code() { # mask_code FILE 0|1|2 -> heredoc bodies, single-quoted text at 1,
         }
         if (c == "\\") { out = out substr($0, i, 2); i++; continue }
         if (c == "#" && (i == 1 || substr($0, i - 1, 1) ~ /[ \t;&|()]/)) { out = out substr($0, i); break }
+        if (substr($0, i, 2) == "$\047") { q = "$"; out = out substr($0, i, 2); i++; continue }
         if (c == "\047" || c == "\"") { q = c; out = out c; continue }
         if (opener == "" && substr($0, i, 2) == "<<" && substr($0, i, 3) != "<<<" && (i == 1 || substr($0, i - 1, 1) != "<") &&
           match(substr($0, i), /^<<-?[\047"]?[A-Za-z_][A-Za-z0-9_]*/))
@@ -598,10 +607,58 @@ if ((posix_tools)); then
   active_cmd="${active_cmd:+$active_cmd|}$bsd"
 fi
 # Matched in the masked text, shown as the script has it: the line numbers are the same
+show_lines() { # show_lines < LINE NUMBERS -> `LINE has: text` from the script
+  awk 'NR == FNR { want[$1]; next } FNR in want { sub(/^[[:space:]]*/, ""); print FNR " has: " $0 }' - "$code"
+}
 proxy_hits() { # proxy_hits REGEX CORPUS -> `LINE has: text` for each match outside a comment
   [[ -n "$1" ]] || return 0
-  grep -nE "$1" "$2" | grep -vE '^[0-9]+:[[:space:]]*#' | cut -d: -f1 |
-    awk 'NR == FNR { want[$1]; next } FNR in want { sub(/^[[:space:]]*/, ""); print FNR " has: " $0 }' - "$code" || :
+  grep -nE "$1" "$2" | grep -vE '^[0-9]+:[[:space:]]*#' | cut -d: -f1 | show_lines || :
+}
+# A heredoc opened inside $( ), <( ) or >( ) is bash 4.0: 3.2 finds the end of the
+# substitution by scanning the heredoc's body as code, so an unpaired ' in it is a syntax
+# error and an unpaired ) ends the substitution early, and the value is quietly wrong. No
+# single line shows it — the idiom opens the substitution on the line before — so the
+# open substitutions are tracked across lines, with quotes — $'...', where \' does not
+# close the text, among them — comments, $(( )) and (( )),
+# whose << is a shift. Read in the copy with heredoc bodies blanked, where the opener
+# line stays. Backticks are left alone: 3.2 reads a heredoc inside them correctly
+heredoc_in_subst() { # heredoc_in_subst -> `LINE has: text` for each such opener
+  awk '
+    {
+      n = length($0)
+      for (i = 1; i <= n; i++) {
+        c = substr($0, i, 1)
+        if (q == "\047") { if (c == "\047") q = ""; continue }
+        if (q == "$") { if (c == "\\") i++; else if (c == "\047") q = ""; continue }
+        if (c == "\\") { i++; continue }
+        if (q == "\"") {
+          if (c == "\"") q = ""
+          else if (substr($0, i, 3) == "$((") { st[++d] = "a"; st[++d] = "a"; i += 2 }
+          else if (substr($0, i, 2) == "$(") { st[++d] = "sq"; q = ""; i++ }
+          continue
+        }
+        if (c == "#" && (i == 1 || substr($0, i - 1, 1) ~ /[ \t;&|()]/)) break
+        if (substr($0, i, 2) == "$\047") { q = "$"; i++; continue }
+        if (c == "\047" || c == "\"") { q = c; continue }
+        if (substr($0, i, 3) == "$((" ) { st[++d] = "a"; st[++d] = "a"; i += 2; continue }
+        if (substr($0, i, 2) == "((") { st[++d] = "a"; st[++d] = "a"; i++; continue }
+        two = substr($0, i, 2)
+        if (two == "$(" || two == "<(" || two == ">(") { st[++d] = "s"; i++; continue }
+        if (c == "(") { st[++d] = "p"; continue }
+        if (c == ")") { if (d) { if (st[d] == "sq") q = "\""; d-- } continue }
+        if (two == "<<" && substr($0, i, 3) != "<<<" && (i == 1 || substr($0, i - 1, 1) != "<") &&
+          match(substr($0, i), /^<<-?[\047"]?[A-Za-z_]/)) {
+          inside = 0
+          for (k = d; k > 0; k--) {
+            if (st[k] == "a") break
+            if (st[k] ~ /^s/) { inside = 1; break }
+          }
+          if (inside) print FNR
+          i++
+        }
+      }
+    }
+  ' "$code" | show_lines || :
 }
 if [[ -n "$active_cmd$active_exp" ]]; then
   claimed="bash ${claim#Needs bash }"
@@ -612,6 +669,7 @@ if [[ -n "$active_cmd$active_exp" ]]; then
   done < <({
     proxy_hits "$active_cmd" "$code_dq"
     proxy_hits "$active_exp" "$code_sq"
+    if ((floor && floor < 400)); then heredoc_in_subst; fi
   } | sort -n -u)
 fi
 
@@ -1146,6 +1204,54 @@ expect_green "$c" "a copy naming a bash 4 construct inside double quotes" -n scr
 c=$(copy claimed-bash4)
 plant "$c" 'HERE=' 'false && declar'"e -A m"
 expect_red "$c" "claims bash 3.2 but $c/script.sh:" "a bash 4 construct under a 3.2 claim" -n script.sh "$c/script.sh"
+
+c=$(copy heredoc-in-subst)
+# The idiom opens the substitution on the line before the heredoc, where no one-line
+# pattern sees both; bash -n under 3.2 passes it, having read the body as code
+plant "$c" 'HERE=' "x=\"\$(
+  cat <<'X'
+a ) b
+X
+)\""
+expect_red "$c" "claims bash 3.2 but $c/script.sh:$(($(grep -n '^HERE=' "$c/script.sh" | cut -d: -f1) + 2)) has: cat <<'X'" "a heredoc inside \$( ) under a 3.2 claim" -n script.sh "$c/script.sh"
+
+c=$(copy heredoc-after-ansi-c)
+# In $'...' a backslash escapes the quote, so \' leaves the text open: read as a plain
+# single-quoted text it closes there, and every quote after it is read the other way round
+plant "$c" 'HERE=' "s=\$'it\\'s'
+x=\$(cat <<X
+a
+X
+)"
+expect_red "$c" "has: x=\$(cat <<X" "a heredoc inside \$( ) after a \$'...' holding \\' under a 3.2 claim" -n script.sh "$c/script.sh"
+
+c=$(copy bash4-after-ansi-c)
+# The masked copies the proxy reads track quotes the same way, and the construct after
+# such a text was blanked as if it were quoted
+plant "$c" 'HERE=' "s=\$'it\\'s'
+false && declar"'e -A m'
+expect_red "$c" "has: false && declar"'e -A m' "a bash 4 construct after a \$'...' holding \\' under a 3.2 claim" -n script.sh "$c/script.sh"
+
+c=$(copy heredoc-in-procsubst)
+plant "$c" 'HERE=' 'while read -r l; do :; done < <(cat <<X
+a
+X
+)'
+expect_red "$c" "has: while read -r l; do :; done < <(cat <<X" "a heredoc inside <( ) under a 3.2 claim" -n script.sh "$c/script.sh"
+
+c=$(copy heredoc-beside-subst)
+# What reads like one and is not: a shift inside $(( )), a here-string, a ( inside a
+# string inside $( ), a heredoc once the substitution has closed, and one in backticks
+plant "$c" 'HERE=' "n=\$(echo \$((1<<k)))
+x=\$(tr a b <<<word)
+y=\"\$(echo \"(\")\"; cat <<X >/dev/null
+b
+X
+z=\`cat <<X
+c
+X
+\`"
+expect_green "$c" "a copy with a shift, a here-string and heredocs outside any \$( )" -n script.sh "$c/script.sh"
 
 c=$(copy unparsable)
 # A file bash cannot read at all: the help run would catch it only where there is a

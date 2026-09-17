@@ -39,7 +39,9 @@ would silently excuse the next real violation that lands on that path
 
 CHECK_SKILL_NESTED=1 skips the self-falsification and runs only the checks. The planted
 copies are run that way, and so should a gate that runs this script inside copies of its
-own repository
+own repository or calls it more than once in one run. The first call of every run keeps
+it: the defects are planted into a copy of the repository being checked, so what it
+proves changes with that repository
 
 The warnings, by the id each line carries:
   layout-section     a Layout heading in SKILL.md or a reference: readme content,

@@ -81,6 +81,10 @@ echo "== the wrapper's help and these documents agree with its dispatcher"
 # CLI, any command at all, which the checker allows once it sees the *) arm forward
 # rather than refuse. It plants its own defects on every run
 ./check-sh.sh -d SKILL.md -d README.md obsi.sh
+# The defect list is sourced by the vendored t.sh under whatever bash runs it, and a
+# heredoc inside $( ) reads as other text under bash 3.2 with no error, so the list claims
+# 3.2 and the checker's proxy holds it to that
+CHECK_SH_NESTED=1 ./check-sh.sh -n defects.sh tests/defects.sh
 
 echo "== what these documents say about the Obsidian CLI is what its own help declares"
 # obsi.sh passes unknown words through, so check-sh.sh cannot tell a real CLI command from a

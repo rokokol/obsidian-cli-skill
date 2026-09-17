@@ -5,6 +5,9 @@
 #
 #   tests/t.sh falsify -- ./check-obsi.sh .
 #
+# Needs bash 3.2, since falsify sources it wherever t.sh runs, macOS included; check.sh
+# holds it to that claim through check-sh.sh
+#
 # Each entry breaks one guard of obsi.sh — its shell half, or the JavaScript it hands to the
 # app's eval — and requires the behaviour suite to notice. This list is the only proof that
 # the suite's checks can fail; the gate does not plant defects of its own. The CONSEQUENCE is
