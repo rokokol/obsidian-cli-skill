@@ -169,3 +169,11 @@ It is the same interpreter the app runs on, so a bad expression can disturb a li
 b=$(printf '%s' "$path" | base64 | tr -d '\n')
 obsidian-cli eval code="(()=>{const p=new TextDecoder().decode(Uint8Array.from(atob('$b'),c=>c.charCodeAt(0)));return Object.keys(app.metadataCache.resolvedLinks[p]||{}).length})()"
 ```
+
+The same transport edits the middle of a note, which `append`, `prepend` and `create … overwrite` cannot: `app.vault.process` rewrites the file through the app, and the code refuses unless the old text occurs exactly once, so a text that drifted or repeats changes nothing. The replacement is a function, since a replacement string would read `$&` and `$'` in the new text as patterns
+
+```bash
+enc() { printf '%s' "$1" | base64 | tr -d '\n'; }
+p=$(enc "$path") old=$(enc "$old_text") new=$(enc "$new_text")
+obsidian-cli eval code="(async()=>{const d=s=>new TextDecoder().decode(Uint8Array.from(atob(s),c=>c.charCodeAt(0)));const f=app.vault.getAbstractFileByPath(d('$p')),a=d('$old'),b=d('$new');const n=(await app.vault.read(f)).split(a).length-1;if(n!==1)return 'refused: old text occurs '+n+' times';await app.vault.process(f,t=>t.replace(a,()=>b));return 'ok'})()"
+```

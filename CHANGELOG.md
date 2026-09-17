@@ -8,6 +8,7 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 
 - A `macos` workflow and badge: `obsi.sh` claims bash 3.2 and a POSIX userland, and the behaviour half of the gate now runs under the `/bin/bash` 3.2 and BSD tools of a macOS runner, with node alone from the locked nixpkgs. It first proves the bash asked is that 3.2 — `CHECK_BASH32=1` checks the version and requires a copy of `obsi.sh` declaring an associative array to fail the suite there
 - `check-obsi.sh --help`, which the synopsis and exit codes moved to from its header comment
+- `references/commands.md`: editing the middle of a note through `eval`, which `append`, `prepend` and `create … overwrite` cannot — `app.vault.process` rewrites the file through the app, the code refuses unless the old text occurs exactly once, and the texts travel base64-encoded like the path before them
 
 ### Changed
 
