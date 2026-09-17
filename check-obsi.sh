@@ -1,22 +1,41 @@
 #!/usr/bin/env bash
-# The offline half of the gate: obsi.sh driven against a fake CLI, so the shell half is
-# checked on a runner with no Obsidian. That each check can fail is proved elsewhere:
-# tests/defects.sh breaks one guard of obsi.sh per entry, and the tests skill's t.sh falsify
-# requires this file to go red for each, on every push to master (.github/workflows/falsify.yml)
+# Needs bash 3.2 and POSIX tools only, and node: it runs under the bash a macOS runner has,
+# and runs obsi.sh under "$BASH" rather than through its shebang, since `env bash` there
+# finds Homebrew's bash 5 and would leave the 3.2 obsi.sh claims unasked
 #
-#   check-obsi.sh [DIR]
-#
-# What it can and cannot answer. Everything the shell owns is covered against the stub:
-# reaching the client, turning a dishonest exit status into an honest one, closing stdin,
-# passing arguments through unchanged, merging and ranking two result sets, and bounding
-# output without losing the notice that says it was bounded. The graph and find queries
-# are JavaScript executed inside the app; the stub captures that code as the wrapper builds
-# it and node runs it against tests/fake-app.js, so its logic is covered for the questions
-# that fake vault asks. How it behaves against a real vault's index is still measured, not
-# tested — see references/obsi.md. Needs node, from the flake's dev shell.
-#
-# Exit 1 with `check-obsi: <what>` on the first finding, 2 on a usage error.
+# That each check can fail is proved elsewhere: tests/defects.sh breaks one guard of obsi.sh
+# per entry, and the tests skill's t.sh falsify requires this file to go red for each, on
+# every push to master (.github/workflows/falsify.yml)
 set -uo pipefail
+
+usage() {
+  cat <<'EOF'
+The behaviour suite: obsi.sh driven against a fake CLI, so its shell half is checked on a
+machine with no Obsidian
+
+  check-obsi.sh [DIR]
+
+DIR is the repository to check, the current directory by default. Everything the shell
+owns is covered against the stub: reaching the client, turning a dishonest exit status
+into an honest one, closing stdin, passing arguments through unchanged, merging and
+ranking two result sets, and bounding output without losing the notice that says it was
+bounded. The graph and find queries are JavaScript executed inside the app; the stub
+captures that code as the wrapper builds it and node runs it against tests/fake-app.js,
+so its logic is covered for the questions that fake vault asks. How it behaves against a
+real vault's index is still measured, not tested — see references/obsi.md
+
+Needs node, from the flake's dev shell or nix shell --inputs-from . nixpkgs#nodejs
+Exit 0 when every check passes, 1 with `check-obsi: <what>` on the first finding, 2 on a
+usage error
+EOF
+}
+
+case "${1:-}" in
+  -h | --help | help)
+    usage
+    exit 0
+    ;;
+esac
 
 root="${1:-.}"
 [[ -d "$root" ]] || {
@@ -56,7 +75,7 @@ export -n out
 out=""
 status=0
 run() {
-  out=$("$obsi" "$@" 2>&1)
+  out=$("$BASH" "$obsi" "$@" 2>&1)
   status=$?
   return 0
 }
@@ -204,7 +223,7 @@ checks=$((checks + 1))
 lines=$(printf 'one\ntwo\nthree\n' | {
   n=0
   while IFS= read -r _; do
-    "$obsi" version >/dev/null 2>&1 || true
+    "$BASH" "$obsi" version >/dev/null 2>&1 || true
     n=$((n + 1))
   done
   printf '%s\n' "$n"
@@ -276,7 +295,7 @@ checks=$((checks + 1))
 # A nix dev shell exports $out, and bash keeps that export on a local of the same name. The
 # 400 KB answer above, held in one, went into the environment of the next command the
 # wrapper ran, exec refused it as "Argument list too long", and find said No matches found
-out_env=$(env out=/nix/store/an-output-path "$obsi" find common --limit 2 2>&1) || true
+out_env=$(env out=/nix/store/an-output-path "$BASH" "$obsi" find common --limit 2 2>&1) || true
 case "$out_env" in
   *"3998 more matches"*) ;;
   *) fail "find under an exported \$out: $out_env" ;;

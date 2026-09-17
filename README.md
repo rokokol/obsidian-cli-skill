@@ -10,6 +10,7 @@
 [![license](https://img.shields.io/badge/MIT-3DA639?style=flat)](LICENSE)
 [![ci](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/build.yml/badge.svg)](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/build.yml)
 [![falsify](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/falsify.yml/badge.svg)](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/falsify.yml)
+[![macos](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/macos.yml/badge.svg)](https://github.com/rokokol/obsidian-cli-skill/actions/workflows/macos.yml)
 
 </div>
 
@@ -106,7 +107,9 @@ Obsidian publishes no skills as an organisation, but [`kepano/obsidian-skills`](
 nix develop -c ./check.sh
 ```
 
-Lints the shell, checks that `SKILL.md` still carries the frontmatter an agent loads it by, and resolves every relative link and heading anchor in the docs — then proves each of those checks able to go red, against throwaway copies of the repository with one planted defect each. A check that has never failed is a decoration
+Two halves, `check.sh lint` and `check.sh behaviour`. The lint half lints the shell and the workflows, checks that `SKILL.md` still carries the frontmatter an agent loads it by, and resolves every relative link and heading anchor in the docs. The behaviour half drives `obsi.sh` against a fake CLI and runs the JavaScript it builds in node against a made-up vault. That each of those checks can go red is proven by `tests/defects.sh`, which the [tests](https://github.com/rokokol/tests-skill) skill's `t.sh falsify` runs after every push to master: it breaks one guard at a time and requires the suite to notice. A check that has never failed is a decoration
+
+`obsi.sh` claims bash 3.2 and a POSIX userland, so the macos workflow runs the behaviour half under the `/bin/bash` 3.2 and the BSD tools of a macOS runner, and first proves that bash is the one asked: a copy of `obsi.sh` declaring an associative array must fail the suite there
 
 Every Obsidian CLI command and parameter the docs spell is held to what the CLI's own `help` declares, by the [ci](https://github.com/rokokol/ci-skill) skill's `check-interface.sh`. No runner has the app, so the gate reads `tests/obsidian-help.txt`, the help one version answered; run it as `OBSIDIAN_CLI=obsidian-cli nix develop -c ./check.sh` with the app open and the recording is first compared with the live help, so the day Obsidian renames something the gate says the recording is stale. Once the recording is regenerated, a command it no longer has is a finding wherever the docs still name it: the gate reads every earlier recording from git, which is why it needs a full clone
 

@@ -2,6 +2,17 @@
 
 Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dated rather than numbered, and with no `Unreleased` section — this repository is read at whatever revision you have checked out, so whatever is on the default branch is what every reader already has
 
+## 2026-09-17
+
+### Added
+
+- A `macos` workflow and badge: `obsi.sh` claims bash 3.2 and a POSIX userland, and the behaviour half of the gate now runs under the `/bin/bash` 3.2 and BSD tools of a macOS runner, with node alone from the locked nixpkgs. It first proves the bash asked is that 3.2 — `CHECK_BASH32=1` checks the version and requires a copy of `obsi.sh` declaring an associative array to fail the suite there
+- `check-obsi.sh --help`, which the synopsis and exit codes moved to from its header comment
+
+### Changed
+
+- `check.sh` takes `lint`, `behaviour` or `all`, the default: the behaviour half needs only bash and node, so it can run where the lint tools are not. `check-obsi.sh` runs `obsi.sh` under `"$BASH"` rather than through its shebang, which on a macOS runner finds Homebrew's bash 5
+
 ## 2026-09-16
 
 ### Changed

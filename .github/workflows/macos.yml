@@ -1,0 +1,40 @@
+name: macos
+
+# The behaviour half of the gate under the bash macOS ships. obsi.sh claims "Needs bash 3.2
+# and POSIX tools only", and it is proven here, under the real /bin/bash 3.2 and the BSD
+# userland of a macOS runner, with a construct planted that only a 3.2 rejects — a grep for
+# newer syntax is a proxy, and this is the mechanism. Taken from
+# templates/github/workflows/macos.yml of https://github.com/rokokol/bash-best-practices-skill,
+# with node added: the suite runs the JavaScript obsi.sh builds. It comes from the nixpkgs the
+# flake locks through nix shell, which adds node alone, where nix develop would put GNU
+# coreutils in front of the BSD tools the claim is about
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  bash32:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: cachix/install-nix-action@v31
+      - name: the behaviour half under the bash macOS ships
+        env:
+          CHECK_BASH32: "1"
+        run: |
+          /bin/bash --version
+          nix shell --no-write-lock-file --inputs-from . nixpkgs#nodejs -c /bin/bash ./check.sh behaviour
