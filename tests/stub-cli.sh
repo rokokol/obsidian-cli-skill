@@ -23,6 +23,9 @@
 #   STUB_STDERR   a line every eval also writes to stderr, the way a runtime warning would
 #   STUB_CODE_LOG file to save the code of find's metadata query in, for what reached it
 #   STUB_EVAL_LOG file to save the code of every eval in, the last one winning
+#
+# No -e: the exit code is the scenario here — 0 with `Error: …` on stdout, 1 with no app,
+# 3 for the other shape — so it is chosen deliberately, never inherited from a command
 set -uo pipefail
 
 # The real client reads stdin. Draining it here is what makes the loop test meaningful:

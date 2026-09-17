@@ -7,6 +7,9 @@
 # That each check can fail is proved elsewhere: tests/defects.sh breaks one guard of obsi.sh
 # per entry, and the tests skill's t.sh falsify requires this file to go red for each, on
 # every push to master (.github/workflows/falsify.yml)
+#
+# No -e: obsi.sh's status is what most checks here assert on — a refusal is expected to be
+# non-zero — so `run` captures it into $status rather than letting it end the checker
 set -uo pipefail
 
 usage() {
