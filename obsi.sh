@@ -51,7 +51,7 @@ The CLI fails quietly in several ways, and each is absorbed here rather than lef
 caller. What they are, why each is handled the way it is, and the measurements behind both
 are in references/obsi.md, and not repeated here
 
-Nothing here reaches the network; it needs a running Obsidian 1.12+ to talk to.
+Nothing here reaches the network; it needs a running Obsidian 1.12+ to talk to
 Exit 0 done, 1 when the CLI or the vault answered with an error, 2 on a usage error
 EOF
 }

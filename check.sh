@@ -25,7 +25,7 @@ Cannot cover the skill's behavioural claims: they need a running Obsidian with a
 vault, which no runner has. They carry their measurements instead, so a reader with an
 app open can falsify them by hand — see references/pitfalls.md
 
-Nothing here touches the network, so it is safe on pull requests.
+Nothing here touches the network, so it is safe on pull requests
 Exit 0 clean, 1 with `check: <what>` on the first finding or a usage error
 EOF
 }
