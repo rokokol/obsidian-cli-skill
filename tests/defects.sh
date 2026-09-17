@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016 # every $ in a single-quoted text here is text to find, never an expansion
 # The defect list for this repository, read by the tests skill's harness, vendored beside
 # it, and run by .github/workflows/falsify.yml:
 #
@@ -12,9 +13,9 @@
 #
 #   defect NAME FILE FIND REPLACE CONSEQUENCE [expect survived REASON | expect caught FRAGMENT]
 #
-# A FIND or REPLACE that holds a $ or both kinds of quote is a quoted heredoc: it keeps the
-# line exactly as obsi.sh spells it, with no escaping to get wrong. Two entries share a line
-# only where the line holds two behaviours a caller can tell apart
+# A FIND or REPLACE of several lines or holding quotes is single-quoted, in the form and for
+# the bash 3.2 reason templates/defects.sh of https://github.com/rokokol/tests-skill gives.
+# Two entries share a line only where the line holds two behaviours a caller can tell apart
 
 # ---- reaching the app ------------------------------------------------------------------
 
@@ -30,16 +31,8 @@ defect 'reach/version-shape' 'obsi.sh' \
   'any binary called obsidian-cli is taken for the client, whatever it answers, and every call goes to it'
 
 defect 'reach/env-first' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-for candidate in ${OBSIDIAN_CLI:+"$OBSIDIAN_CLI"} obsidian-cli obsidian; do
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-for candidate in obsidian-cli obsidian ${OBSIDIAN_CLI:+"$OBSIDIAN_CLI"}; do
-EOF
-  )" \
+  'for candidate in ${OBSIDIAN_CLI:+"$OBSIDIAN_CLI"} obsidian-cli obsidian; do' \
+  'for candidate in obsidian-cli obsidian ${OBSIDIAN_CLI:+"$OBSIDIAN_CLI"}; do' \
   'OBSIDIAN_CLI is ignored whenever another client on PATH answers, so the user cannot choose which client talks to the app'
 
 defect 'reach/launcher-last' 'obsi.sh' \
@@ -48,74 +41,38 @@ defect 'reach/launcher-last' 'obsi.sh' \
   'the GUI launcher is asked for its version before the client, and on a packaged install every call opens an Obsidian window'
 
 defect 'reach/stop-when-app-down' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-        unreachable="$candidate"
-        break
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-        unreachable="$candidate"
-        continue
-EOF
-  )" \
+  '        unreachable="$candidate"
+        break' \
+  '        unreachable="$candidate"
+        continue' \
   'with the app closed, discovery goes on to run "obsidian", which on a packaged install opens a window instead of answering' \
   expect caught 'went on to run'
 
 defect 'reach/app-down-message' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-  [[ -z "$unreachable" ]] ||
-EOF
-  )" \
+  '  [[ -z "$unreachable" ]] ||' \
   '  true ||' \
   'someone with the client installed and the app closed is told to install a client they already have'
 
 defect 'reach/probe-stdin' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-answer=$("$candidate" version </dev/null 2>&1)
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-answer=$("$candidate" version 2>&1)
-EOF
-  )" \
+  'answer=$("$candidate" version </dev/null 2>&1)' \
+  'answer=$("$candidate" version 2>&1)' \
   'every obsi.sh call inside a while-read loop swallows the rest of the list while it looks for the client'
 
 # ---- the dishonest client ------------------------------------------------------------------
 
 defect 'cli/stdin' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-"$@" </dev/null 2>"$scratch/stderr")
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-"$@" 2>"$scratch/stderr")
-EOF
-  )" \
+  '"$@" </dev/null 2>"$scratch/stderr")' \
+  '"$@" 2>"$scratch/stderr")' \
   'every CLI call inside a while-read loop swallows the rest of the list, and the loop quietly does one item' \
   expect caught 'stdin was eaten'
 
 defect 'cli/error-at-exit-0' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-    "Error: "*) die "${out#Error: }" ;;
+  '    "Error: "*) die "${out#Error: }" ;;
   esac
-  ((status == 0))
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-    "Error: "*) : ;;
+  ((status == 0))' \
+  '    "Error: "*) : ;;
   esac
-  ((status == 0))
-EOF
-  )" \
+  ((status == 0))' \
   'a missing note or a bad parameter reported by the app exits 0, and the caller acts on an error message as though it were the answer' \
   expect caught 'an application error at exit 0'
 
@@ -125,80 +82,40 @@ defect 'cli/nonzero-status' 'obsi.sh' \
   'a client that fails or crashes reads as success, with whatever it printed before dying taken for the answer'
 
 defect 'cli/stderr-apart' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-[[ -z "$err" ]] || printf '%s\n' "$err" >&2
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-[[ -z "$err" ]] || printf '%s\n' "$err"
-EOF
-  )" \
+  '[[ -z "$err" ]] || printf '"'"'%s\n'"'"' "$err" >&2' \
+  '[[ -z "$err" ]] || printf '"'"'%s\n'"'"' "$err"' \
   'a runtime warning from the app lands inside the answer, a dumped graph.json included, and makes it unparseable' \
   expect caught 'landed inside the JSON'
 
 defect 'js/prefix' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-out="${out#"=> "}"
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-out="$out"
-EOF
-  )" \
+  'out="${out#"=> "}"' \
+  'out="$out"' \
   'every answer from eval starts with "=> ", and an error raised by the JavaScript exits 0'
 
 defect 'js/cli-refusal-passed-on' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-  ((status == 0)) || exit "$status"
-EOF
-  )" \
+  '  ((status == 0)) || exit "$status"' \
   '  :' \
   "a refusal the CLI prints for the query is lost inside the caller's command substitution: find says No matches found and graph dump empties the file it was meant to keep, both at exit 0"
 
 defect 'js/error-at-exit-0' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-    "Error: "*) die "${out#Error: }" ;;
+  '    "Error: "*) die "${out#Error: }" ;;
   esac
-  printf '%s\n' "$out"
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-    "Error: "*) : ;;
+  printf '"'"'%s\n'"'"' "$out"' \
+  '    "Error: "*) : ;;
   esac
-  printf '%s\n' "$out"
-EOF
-  )" \
+  printf '"'"'%s\n'"'"' "$out"' \
   'a refusal raised inside the app — a note not in the graph, a selftest that found drift — prints and exits 0' \
   expect caught 'an error raised inside eval'
 
 defect 'exit/usage-is-2' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-  printf 'obsi: %s\n' "$1" >&2
-  exit 2
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-  printf 'obsi: %s\n' "$1" >&2
-  exit 1
-EOF
-  )" \
+  '  printf '"'"'obsi: %s\n'"'"' "$1" >&2
+  exit 2' \
+  '  printf '"'"'obsi: %s\n'"'"' "$1" >&2
+  exit 1' \
   'every usage error exits 1, the same as an answer from the CLI or the vault, and a caller cannot tell a typo from a note that is not there'
 
 defect 'answer/empty' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-[[ -n "$out" ]] || die "the app answered nothing
-EOF
-  )" \
+  '[[ -n "$out" ]] || die "the app answered nothing' \
   'true || die "the app answered nothing' \
   'a graph query the app answered with nothing prints a blank line at exit 0, which reads like an answer' \
   expect caught 'answered with nothing'
@@ -206,167 +123,87 @@ EOF
 # ---- counts spliced into the app's JavaScript ------------------------------------------------
 
 defect 'count/validator-body' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-  for value in "$@"; do
-    [[ "$value" =~ ^[1-9][0-9]*$ ]] || usage_error "expected a positive number, not '$value'"
-  done
-EOF
-  )" \
+  '  for value in "$@"; do
+    [[ "$value" =~ ^[1-9][0-9]*$ ]] || usage_error "expected a positive number, not '"'"'$value'"'"'"
+  done' \
   '  :' \
   'a row count such as "app", or a crafted expression, runs as code inside the app with full access to the vault'
 
 defect 'count/leading-zero' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-=~ ^[1-9][0-9]*$ ]]
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-=~ ^[0-9]+$ ]]
-EOF
-  )" \
+  '=~ ^[1-9][0-9]*$ ]]' \
+  '=~ ^[0-9]+$ ]]' \
   'a count of 010 is octal 8 in the app and 0 answers zero rows, both at exit 0 as if they were what was asked'
 
 defect 'count/hubs' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-      need_count "${1:-10}"
-      answer graph_hubs
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-      :
-      answer graph_hubs
-EOF
-  )" \
+  '      need_count "${1:-10}"
+      answer graph_hubs' \
+  '      :
+      answer graph_hubs' \
   'the row count of graph hubs is spliced into the app unchecked, where "app" answers No links found and a crafted value runs as code' \
   expect caught "a row count that names something in the app's scope"
 
 defect 'count/ends' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-      need_count "${1:-10}"
-      answer graph_ends
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-      :
-      answer graph_ends
-EOF
-  )" \
+  '      need_count "${1:-10}"
+      answer graph_ends' \
+  '      :
+      answer graph_ends' \
   'the row count of graph ends is spliced into the app unchecked, and a crafted value runs as code'
 
 defect 'count/components-width' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-need_count "${1:-10}" "${2:-5}"
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-need_count "${1:-10}"
-EOF
-  )" \
+  'need_count "${1:-10}" "${2:-5}"' \
+  'need_count "${1:-10}"' \
   'the second count of graph components, how many notes each row shows, is spliced into the app unchecked'
 
 defect 'count/unresolved' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-need_count "${1:-40}"
-EOF
-  )" \
+  'need_count "${1:-40}"' \
   ':' \
   'the row count of graph unresolved is spliced into the app unchecked, and a crafted value runs as code'
 
 defect 'count/find-limit' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-    need_count "$limit"
-EOF
-  )" \
+  '    need_count "$limit"' \
   '    :' \
   'find --limit abc is not refused, and the cut and its notice go wrong without a word'
 
 defect 'count/related-rows' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-need_count "$related_rows"
-EOF
-  )" \
+  'need_count "$related_rows"' \
   ':' \
   'the row count of graph related is spliced into the app unchecked, and a crafted value runs as code'
 
 # ---- graph arguments -----------------------------------------------------------------------
 
 defect 'arity/summary' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-(($# == 0)) || usage_error "graph summary takes no arguments"
-EOF
-  )" \
+  '(($# == 0)) || usage_error "graph summary takes no arguments"' \
   'true || usage_error "graph summary takes no arguments"' \
   'a word after graph summary is dropped in silence, and the summary answers as though it had not been typed'
 
 defect 'arity/hubs' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-(($# <= 1)) || usage_error "graph hubs takes one row count"
-EOF
-  )" \
+  '(($# <= 1)) || usage_error "graph hubs takes one row count"' \
   'true || usage_error "graph hubs takes one row count"' \
   'graph hubs 5 10 answers for 5 and drops the 10 without a word'
 
 defect 'arity/ends' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-(($# <= 1)) || usage_error "graph ends takes one row count"
-EOF
-  )" \
+  '(($# <= 1)) || usage_error "graph ends takes one row count"' \
   'true || usage_error "graph ends takes one row count"' \
   'a second word to graph ends is dropped in silence'
 
 defect 'arity/unresolved' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-(($# <= 1)) || usage_error "graph unresolved takes one row count"
-EOF
-  )" \
+  '(($# <= 1)) || usage_error "graph unresolved takes one row count"' \
   'true || usage_error "graph unresolved takes one row count"' \
   'a second word to graph unresolved is dropped in silence'
 
 defect 'arity/components' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-(($# <= 2)) || usage_error "graph components takes a row count and a width"
-EOF
-  )" \
+  '(($# <= 2)) || usage_error "graph components takes a row count and a width"' \
   'true || usage_error "graph components takes a row count and a width"' \
   'a third word to graph components is dropped in silence'
 
 defect 'arity/related-rows' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-[[ -z "$related_rows_given" ]] ||
-EOF
-  )" \
+  '[[ -z "$related_rows_given" ]] ||' \
   'true ||' \
   'graph related a.md 3 4 answers with 4 rows and drops the 3 without a word'
 
 defect 'related/tag-max-shape' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-[[ "$related_tags" =~ ^(0|[1-9][0-9]*)$ ]] ||
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-[[ "$related_tags" =~ ^-?[0-9]+$ ]] ||
-EOF
-  )" \
+  '[[ "$related_tags" =~ ^(0|[1-9][0-9]*)$ ]] ||' \
+  '[[ "$related_tags" =~ ^-?[0-9]+$ ]] ||' \
   '--tag-max-notes 010 means 8 in the app, and -1 silently means the default' \
   expect caught '--tag-max-notes 010'
 
@@ -376,97 +213,49 @@ defect 'related/tag-max-default' 'obsi.sh' \
   'graph related without --tag-max-notes ignores shared tags altogether, rather than counting the ones on under a twentieth of the vault'
 
 defect 'related/tag-max-needs-value' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-(($# >= 2)) || usage_error "--tag-max-notes needs a number
-EOF
-  )" \
+  '(($# >= 2)) || usage_error "--tag-max-notes needs a number' \
   'true || usage_error "--tag-max-notes needs a number' \
   "--tag-max-notes with no value ends in bash's own unbound-variable error instead of saying what it needs"
 
 defect 'related/unknown-option' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
--*) usage_error "unknown option '$1' — graph related takes a row count and --tag-max-notes" ;;
-EOF
-  )" \
+  '-*) usage_error "unknown option '"'"'$1'"'"' — graph related takes a row count and --tag-max-notes" ;;' \
   '-*) shift ;;' \
   'a mistyped flag to graph related is swallowed and the query runs with defaults as though it had been understood'
 
 defect 'related/needs-note' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-[[ $# -ge 1 ]] || usage_error "graph related needs a note path
-EOF
-  )" \
+  '[[ $# -ge 1 ]] || usage_error "graph related needs a note path' \
   'true || usage_error "graph related needs a note path' \
   "graph related with no note ends in bash's unbound-variable error instead of saying it needs a path"
 
 defect 'path/two-notes' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-[[ $# -eq 2 ]] || usage_error "graph path needs two
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-[[ $# -ge 2 ]] || usage_error "graph path needs two
-EOF
-  )" \
+  '[[ $# -eq 2 ]] || usage_error "graph path needs two' \
+  '[[ $# -ge 2 ]] || usage_error "graph path needs two' \
   'graph path with a third note answers for the first two and drops the third without a word'
 
 defect 'dump/one-file' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-[[ $# -le 1 ]] || usage_error "graph dump takes one file
-EOF
-  )" \
+  '[[ $# -le 1 ]] || usage_error "graph dump takes one file' \
   'true || usage_error "graph dump takes one file' \
   'graph dump with two files writes the first and silently ignores the second'
 
 defect 'dump/asked-first' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-  [[ -d "$dir" && -w "$dir" && (! -e "$target" || -w "$target") ]] ||
-EOF
-  )" \
+  '  [[ -d "$dir" && -w "$dir" && (! -e "$target" || -w "$target") ]] ||' \
   '  true ||' \
   'an unwritable target is found out only after the whole graph was queried, and a read-only graph.json in a writable folder is overwritten'
 
 defect 'dump/in-place' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-printf '%s\n' "$out" >"$tmp" && mv -f -- "$tmp" "$target"
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-printf '%s\n' "$out" >"$target"
-EOF
-  )" \
+  'printf '"'"'%s\n'"'"' "$out" >"$tmp" && mv -f -- "$tmp" "$target"' \
+  'printf '"'"'%s\n'"'"' "$out" >"$target"' \
   'the graph is written in place, so a failed write leaves graph.json half-written, and a hidden temp file is left beside it on every dump'
 
 defect 'dump/truncates-first' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-  local target="$1" dir tmp out
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-  local target="$1" dir tmp out
-  : >"$target"
-EOF
-  )" \
+  '  local target="$1" dir tmp out' \
+  '  local target="$1" dir tmp out
+  : >"$target"' \
   'an app that is down turns an existing graph.json into an empty file' \
   expect caught 'the existing file was clobbered'
 
 defect 'graph/unknown-query' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-*) usage_error "unknown graph query '$what' — see obsi.sh --help" ;;
-EOF
-  )" \
+  '*) usage_error "unknown graph query '"'"'$what'"'"' — see obsi.sh --help" ;;' \
   '*) answer graph_summary ;;' \
   'a misspelt graph query answers with the summary, as if it were what was asked'
 
@@ -477,116 +266,64 @@ defect 'selftest/dispatched' 'obsi.sh' \
   expect caught 'selftest when the counts agree'
 
 defect 'selftest/no-args' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-(($# == 0)) || usage_error "selftest takes no arguments"
-EOF
-  )" \
+  '(($# == 0)) || usage_error "selftest takes no arguments"' \
   'true || usage_error "selftest takes no arguments"' \
   'words after selftest are dropped in silence, the CLI habit the wrapper exists to stop'
 
 # ---- the wrapper's own arguments --------------------------------------------------------------
 
 defect 'args/vault-one-word' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-prefix=("vault=$2")
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-prefix=(vault= "$2")
-EOF
-  )" \
+  'prefix=("vault=$2")' \
+  'prefix=(vault= "$2")' \
   'a vault name with a space reaches the CLI as two arguments, it ignores both, and answers for whichever vault is open' \
   expect caught 'arrived split'
 
 defect 'args/vault-needs-name' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-(($# >= 2)) || usage_error "--vault needs a name"
-EOF
-  )" \
+  '(($# >= 2)) || usage_error "--vault needs a name"' \
   'true || usage_error "--vault needs a name"' \
   "--vault with no name ends in bash's unbound-variable error instead of saying it needs a name"
 
 defect 'args/vault-selector' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-      prefix=("$1")
-EOF
-  )" \
+  '      prefix=("$1")' \
   '      break' \
   'obsi.sh vault=X find … sends find to the CLI as its own command, which the CLI does not have'
 
 defect 'args/no-command' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-  usage >&2
-  exit 2
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-  usage >&2
-  exit 0
-EOF
-  )" \
+  '  usage >&2
+  exit 2' \
+  '  usage >&2
+  exit 0' \
   'a call whose command expanded to nothing exits 0, as though it had done something'
 
 defect 'pass/vault-after-command' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-if [[ -n "$command_word" && ("$arg" == vault=* || "$arg" == --vault) ]]; then
-EOF
-  )" \
+  'if [[ -n "$command_word" && ("$arg" == vault=* || "$arg" == --vault) ]]; then' \
   'if false; then' \
   'a vault named after the command word is dropped by the CLI in silence, and the answer comes from whichever vault is open'
 
 # ---- find: arguments ---------------------------------------------------------------------------
 
 defect 'find/needs-query' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-(($#)) || usage_error "find needs something to look for"
-EOF
-  )" \
+  '(($#)) || usage_error "find needs something to look for"' \
   'true || usage_error "find needs something to look for"' \
   "find with nothing to look for ends in bash's unbound-variable error instead of saying what it needs"
 
 defect 'find/unknown-option' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-*) usage_error "unknown option '$1' — see obsi.sh --help" ;;
-EOF
-  )" \
+  '*) usage_error "unknown option '"'"'$1'"'"' — see obsi.sh --help" ;;' \
   '*) shift ;;' \
   'a mistyped find flag is swallowed and the search runs wider than asked, looking like the narrowed answer'
 
 defect 'find/limit-needs-value' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-(($# >= 2)) || usage_error "--limit needs a number"
-EOF
-  )" \
+  '(($# >= 2)) || usage_error "--limit needs a number"' \
   'true || usage_error "--limit needs a number"' \
   "--limit with no value ends in bash's unbound-variable error instead of saying it needs a number"
 
 defect 'find/prop-needs-value' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-(($# >= 2)) || usage_error "--prop needs NAME or NAME=VALUE"
-EOF
-  )" \
+  '(($# >= 2)) || usage_error "--prop needs NAME or NAME=VALUE"' \
   'true || usage_error "--prop needs NAME or NAME=VALUE"' \
   "--prop with no value ends in bash's unbound-variable error instead of saying it needs a name"
 
 defect 'find/value-marker' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-          markers="$markers prop"
-EOF
-  )" \
+  '          markers="$markers prop"' \
   '          :' \
   '--value is accepted and dropped, so find --value searches every field instead of property values' \
   expect caught 'its one marker'
@@ -597,53 +334,25 @@ defect 'find/default-markers' 'obsi.sh' \
   'a plain find stops matching property values, though naming no field is documented to mean all of them'
 
 defect 'find/value-scope-name' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-scope="${prop%%=*}"
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-scope="$prop"
-EOF
-  )" \
+  'scope="${prop%%=*}"' \
+  'scope="$prop"' \
   'find --value --prop status=draft looks for a property literally named status=draft and finds nothing'
 
 defect 'find/scope-needs-value' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-[[ -z "$value_flag" || -z "$prop" ]] ||
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-[[ -z "$prop" ]] ||
-EOF
-  )" \
+  '[[ -z "$value_flag" || -z "$prop" ]] ||' \
+  '[[ -z "$prop" ]] ||' \
   'find --prop status confines the value match to status even without --value, so matches in other properties vanish' \
   expect caught 'confined the value match to the filtered property'
 
 # ---- find: merging, ranking, bounding --------------------------------------------------------
 
 defect 'find/text-over-fetch' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-limit="$((limit * 3))")
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-limit="$limit")
-EOF
-  )" \
+  'limit="$((limit * 3))")' \
+  'limit="$limit")' \
   'the text search is asked for only as many notes as are shown, so its cap is never seen and the notice states a floor as an exact count'
 
 defect 'find/search-sentence' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-[[ "$body" == "No matches found." ]] && body=""
-EOF
-  )" \
+  '[[ "$body" == "No matches found." ]] && body=""' \
   'true' \
   'search answering No matches found is ranked as a note by that name, one point, text'
 
@@ -653,121 +362,53 @@ defect 'find/capped-floor' 'obsi.sh' \
   'a text search that filled its cap exactly is reported as a complete count of what was left out, not a floor'
 
 defect 'find/empty-sentence' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-  if [[ -z "$ranked" ]]; then
-    echo "No matches found."
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-  if [[ -z "$ranked" ]]; then
-    echo ""
-EOF
-  )" \
+  '  if [[ -z "$ranked" ]]; then
+    echo "No matches found."' \
+  '  if [[ -z "$ranked" ]]; then
+    echo ""' \
   'a find with no matches prints an empty line, which a caller cannot tell from a failure that printed nothing' \
   expect caught 'find with no matches'
 
 defect 'find/prop-filters-index' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-meta=$(printf '%s\n' "$meta" | awk -F'\t' 'NR == FNR { a[$0]; next } $3 in a' "$allow" -)
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-meta=$meta
-EOF
-  )" \
+  'meta=$(printf '"'"'%s\n'"'"' "$meta" | awk -F'"'"'\t'"'"' '"'"'NR == FNR { a[$0]; next } $3 in a'"'"' "$allow" -)' \
+  'meta=$meta' \
   '--prop filters the text half only, and every name, alias, tag and heading hit comes back unfiltered'
 
 defect 'find/prop-filters-text' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-body=$(printf '%s\n' "$body" | grep -Fxf "$allow" || true)
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-body=$body
-EOF
-  )" \
+  'body=$(printf '"'"'%s\n'"'"' "$body" | grep -Fxf "$allow" || true)' \
+  'body=$body' \
   '--prop filters the index half only, and every text hit comes back unfiltered' \
   expect caught '--prop filtering both halves'
 
 defect 'find/prop-none-kept' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-"$allow" || true)
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-"$allow" || printf '%s\n' "$body")
-EOF
-  )" \
+  '"$allow" || true)' \
+  '"$allow" || printf '"'"'%s\n'"'"' "$body")' \
   'find --prop naming a property no note has answers with every text hit, unfiltered, instead of No matches found' \
   expect caught 'find --prop naming a property no note has'
 
 defect 'find/merge-adds' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-$0 != "" { s[$0] += 1;
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-$0 != "" { s[$0] = 1;
-EOF
-  )" \
+  '$0 != "" { s[$0] += 1;' \
+  '$0 != "" { s[$0] = 1;' \
   'a note found both by alias and in the text drops to one point and ranks below notes that only mention the word'
 
 defect 'find/rank-order' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-sort -t"$(printf '\t')" -k1,1nr -k3,3)
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-sort -t"$(printf '\t')" -k3,3)
-EOF
-  )" \
+  'sort -t"$(printf '"'"'\t'"'"')" -k1,1nr -k3,3)' \
+  'sort -t"$(printf '"'"'\t'"'"')" -k3,3)' \
   'find lists notes alphabetically, and --limit cuts off the exact match in favour of whatever sorts first'
 
 defect 'find/empty-sentence' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-  if [[ -z "$ranked" ]]; then
-EOF
-  )" \
+  '  if [[ -z "$ranked" ]]; then' \
   '  if false; then' \
   'find with no matches prints a blank line at exit 0, which a caller cannot tell from a failure'
 
 defect 'find/limit-applied' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-awk -v n="$limit" 'NR <= n'
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-awk -v n="$limit" 'NR > 0'
-EOF
-  )" \
+  'awk -v n="$limit" '"'"'NR <= n'"'"'' \
+  'awk -v n="$limit" '"'"'NR > 0'"'"'' \
   'find prints every match however many there are, while its notice still claims some were held back'
 
 defect 'find/head-sigpipe' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-awk -v n="$limit" 'NR <= n'
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-head -n "$limit"
-EOF
-  )" \
+  'awk -v n="$limit" '"'"'NR <= n'"'"'' \
+  'head -n "$limit"' \
   'find over a large result dies of SIGPIPE under pipefail before it can say what it cut' \
   expect caught 'larger than a pipe buffer'
 
@@ -809,25 +450,13 @@ defect 'js-find/fields-add-up' 'obsi.sh' \
   'a note that matches by name and by alias scores only for the first, and ranks with notes matching once'
 
 defect 'js-find/prop-skips-lists' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-if (scope ? k !== scope : /^(aliases|tags)$/i.test(k)) continue
-EOF
-  )" \
+  'if (scope ? k !== scope : /^(aliases|tags)$/i.test(k)) continue' \
   'if (scope ? k !== scope : false) continue' \
   'every alias and tag is reported a second time as a property value, and --value answers with aliases and tags'
 
 defect 'js-find/value-scope' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-if (scope ? k !== scope : /^(aliases|tags)$/i.test(k)) continue
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-if (/^(aliases|tags)$/i.test(k)) continue
-EOF
-  )" \
+  'if (scope ? k !== scope : /^(aliases|tags)$/i.test(k)) continue' \
+  'if (/^(aliases|tags)$/i.test(k)) continue' \
   'find --value --prop status answers with draft in any property of the note, not in status alone' \
   expect caught 'find --value --prop status in node'
 
@@ -857,30 +486,14 @@ defect 'fm/list-item-whole' 'obsi.sh' \
   expect caught 'a list alias holding a comma in node'
 
 defect 'fm/tags-key-any-case' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-fmList(fm, /^tags$/i)
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-fmList(fm, /^tags$/)
-EOF
-  )" \
+  'fmList(fm, /^tags$/i)' \
+  'fmList(fm, /^tags$/)' \
   'a note with a capitalised Tags key has no tags to find, graph related or selftest, though Obsidian reads them' \
   expect caught 'a mixed-case key in node'
 
 defect 'fm/aliases-key-any-case' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-fmList(fm, /^aliases$/i)
-EOF
-  )" \
-  "$(
-    cat <<'EOF'
-fmList(fm, /^aliases$/)
-EOF
-  )" \
+  'fmList(fm, /^aliases$/i)' \
+  'fmList(fm, /^aliases$/)' \
   'a note with a capitalised Aliases key cannot be found by its aliases, though Obsidian reads them' \
   expect caught 'a mixed-case key in node'
 
@@ -945,11 +558,7 @@ defect 'graph/hubs-order' 'obsi.sh' \
   'graph hubs lists the least linked-to notes first, and its cut drops the real hubs'
 
 defect 'graph/hubs-cut-said' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-if (ranked.length > $1) lines.push('…\t' + (ranked.length - $1) + '\tmore linked-to notes')
-EOF
-  )" \
+  'if (ranked.length > $1) lines.push('"'"'…\t'"'"' + (ranked.length - $1) + '"'"'\tmore linked-to notes'"'"')' \
   'void 0' \
   'graph hubs cuts its list in silence and reads as the complete set'
 
@@ -964,11 +573,7 @@ defect 'graph/components-largest-first' 'obsi.sh' \
   'graph components lists islands alphabetically, and its cut can drop the mainland'
 
 defect 'graph/components-width' 'obsi.sh' \
-  "$(
-    cat <<'EOF'
-const shown = group.sort().slice(0, $2)
-EOF
-  )" \
+  'const shown = group.sort().slice(0, $2)' \
   'const shown = group.sort()' \
   'one component row lists every note in it, hundreds of paths on one line'
 
