@@ -1135,13 +1135,21 @@ looks_like_test_file() {
 # it spawned, not just the shell around them; without GNU timeout(1), which macOS does not
 # have, that is what a watchdog is.
 #
+# The watchdog sleeps the whole deadline in a process group of its own while this shell
+# waits on the suite, so the run ends when the suite does. Polling `kill -0` every tenth
+# of a second held each run 0.06 s longer on a one-second suite — the rest of the tick,
+# and a sleep started per tick — and a fast suite a whole tick. `wait -n`, which would
+# wait on whichever ends first, is bash 4.3. The watchdog leaves LOG.timedout before its
+# TERM, so a run ended by the deadline is never read as a verdict of the suite's own.
+#
 # Reads three things from the calling subcommand's locals, which bash scopes dynamically:
 # `build`, the command that must succeed before the suite is asked; `deadline`, in
 # seconds, empty for none; and `pass`, the flags forwarded to run.
 VERDICT=""
 MUTANT_PGID=""
+WATCHDOG_PGID=""
 suite_verdict() { # suite_verdict LOG CMD...
-  local log="$1" kind="" pid waited=0 grace=0
+  local log="$1" kind="" pid
   shift
   VERDICT=none
   if [[ -n "$build" ]]; then
@@ -1150,30 +1158,43 @@ suite_verdict() { # suite_verdict LOG CMD...
       return
     fi
   fi
+  rm -f "$log.timedout"
   set -m
   (T_LOGFILE="$log" cmd_run -t 0 "${pass[@]+"${pass[@]}"}" "$@") >/dev/null 2>&1 &
   pid=$!
-  set +m
   MUTANT_PGID="$pid"
-  # Tenths of a second, so a fast suite is not held for a whole second per defect
-  while kill -0 "$pid" 2>/dev/null; do
-    if [[ -n "$deadline" ]] && ((waited >= deadline * 10)); then
+  if [[ -n "$deadline" ]]; then
+    # Five seconds of grace after TERM, polled, since only a run that already missed its
+    # deadline gets here. The group rather than the runner, which this shell has reaped
+    # by then: what outlives the runner is what the KILL is for
+    (
+      grace=0
+      sleep "$deadline"
+      : >"$log.timedout"
       kill -TERM -- -"$pid" 2>/dev/null || :
-      while kill -0 "$pid" 2>/dev/null && ((grace < 50)); do
+      while kill -0 -- -"$pid" 2>/dev/null && ((grace < 50)); do
         sleep 0.1
         grace=$((grace + 1))
       done
       kill -KILL -- -"$pid" 2>/dev/null || :
-      wait "$pid" 2>/dev/null || :
-      MUTANT_PGID=""
-      VERDICT=timedout
-      return
-    fi
-    sleep 0.1
-    waited=$((waited + 1))
-  done
+    ) >/dev/null 2>&1 &
+    WATCHDOG_PGID=$!
+  fi
+  set +m
   wait "$pid" 2>/dev/null || :
   MUTANT_PGID=""
+  if [[ -n "$WATCHDOG_PGID" ]]; then
+    # A watchdog that has fired is finishing its grace and its KILL, and is waited for;
+    # one still asleep is ended with its sleep
+    [[ -e "$log.timedout" ]] || kill -KILL -- -"$WATCHDOG_PGID" 2>/dev/null || :
+    wait "$WATCHDOG_PGID" 2>/dev/null || :
+    WATCHDOG_PGID=""
+  fi
+  if [[ -e "$log.timedout" ]]; then
+    rm -f "$log.timedout"
+    VERDICT=timedout
+    return
+  fi
   [[ ! -r "$log.verdict" ]] || kind=$(cat "$log.verdict")
   case "$kind" in
     pass) VERDICT=survived ;;
@@ -1182,9 +1203,12 @@ suite_verdict() { # suite_verdict LOG CMD...
   esac
 }
 
-# The suite's process group does not get the Ctrl-C the terminal sends, so a trap ends it
+# The suite's process group does not get the Ctrl-C the terminal sends, so a trap ends it,
+# and the watchdog's with it: left asleep, it would wake at the deadline and signal a
+# process group id that may belong to something else by then
 # shellcheck disable=SC2317  # reached through the traps
 end_mutant() {
+  [[ -z "$WATCHDOG_PGID" ]] || kill -KILL -- -"$WATCHDOG_PGID" 2>/dev/null || :
   [[ -z "$MUTANT_PGID" ]] || kill -TERM -- -"$MUTANT_PGID" 2>/dev/null || :
 }
 
