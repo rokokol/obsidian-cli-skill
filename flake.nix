@@ -20,6 +20,10 @@
         default = pkgs.mkShell {
           packages = with pkgs; [
             actionlint
+            # The vendored check-sh.sh is moving to reading a script as a tree, out of
+            # `shfmt --to-json`, with jq flattening that tree into rows. It arrives before
+            # the checker that needs it, so the cascade does not deliver a red run
+            jq
             shellcheck
             shfmt
             # runs the JavaScript obsi.sh hands to eval, against a fake app
