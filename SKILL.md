@@ -41,6 +41,7 @@ These cost one line each and are the difference between a real answer and a plau
 | Create or overwrite | `create path=… content=… overwrite` |
 | Add to a note | `append path=… content=…`, `prepend path=… content=…` (lands after the frontmatter) |
 | Set one property | `property:set path=… name=… value=… type=list` |
+| Rename or move a note, keeping the links that point at it | `rename path=… name=…`, `move path=… to=…` |
 | The vault's graph as a whole | `obsi.sh graph` and the queries `obsi.sh --help` lists |
 | What a note relates to without linking to it | `obsi.sh graph related "folder/note.md"` |
 | Broken links with the file each came from | `obsi.sh graph unresolved` — `unresolved verbose` joins its sources unparseably |
@@ -75,6 +76,7 @@ Prefer the CLI over editing files directly: it goes through the app, so the inde
   eval code='(async()=>{const f=app.vault.getAbstractFileByPath("folder/note.md");await app.fileManager.processFrontMatter(f,fm=>{fm.aliases=["Smith, John","Plain"]});return "ok"})()'
   ```
 
+- **Renaming and moving are writes to every note that links to the one being renamed.** `rename` and `move` have the app do it, and it rewrites each incoming `[[link]]` to the new name; a filesystem `mv` reaches none of them and leaves the whole vault pointing at a name that no longer exists
 - **Indexing is asynchronous.** A graph query fired immediately after a write can answer from the previous state — 9 of 20 immediate reads did here, 0 of 20 after 0.3 s. Re-read before reporting success rather than trusting the write
 
 ## Reference
