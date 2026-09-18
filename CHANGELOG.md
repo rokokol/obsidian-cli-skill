@@ -8,6 +8,10 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 
 - the dev shell carries `jq`, ahead of the checker that will need it: the vendored `check-sh.sh` is moving off its awk lexer to reading the script it is given as a tree, out of `shfmt --to-json`, with jq flattening that tree into the rows its rules read. It lands before the cascade delivers that checker, so a new copy does not arrive to a missing tool and a red verify
 
+### Fixed
+
+- `obsi.sh`'s header names `base64`, which it has always called to embed a path in the JavaScript it sends the app. The header claimed a POSIX userland and nothing else, and `base64` is not in POSIX.1, so a reader provisioning for it was told one dependency short
+
 ## 2026-09-17
 
 ### Added

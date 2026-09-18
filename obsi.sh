@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Needs bash 3.2 and POSIX tools only
+# Needs bash 3.2, base64 and POSIX tools only
 set -euo pipefail
 
 # A nix dev shell exports $out, the build's output path, and bash keeps that export on a
