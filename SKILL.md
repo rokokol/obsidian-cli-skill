@@ -66,7 +66,7 @@ Values with spaces need quoting; `\n` and `\t` work inside `content=`. To target
 
 ## Writing
 
-Prefer the CLI over editing files directly: it goes through the app, so the index and any open editor stay in step
+Write through the app — a CLI command, or `vault.modify` under `eval` — whenever the note may be open in it: a direct file write that lands while the editor autosaves an unsaved buffer leaves the file spliced, the buffer over the head of the new content and the new content's tail surviving. The index needs no such care: an edit made to the file directly is noticed and reindexed like any other. See [`references/pitfalls.md`](references/pitfalls.md#a-direct-write-under-an-open-editor-can-splice-the-file)
 
 - `property:set` **without `type=`** writes a scalar, and overwriting an existing YAML list that way silently flattens it to one line. Pass `type=list` for `tags`, `aliases` and every multi-valued field
 - With `type=list` the comma is the item separator and **there is no escape**: neither `\,` nor quoting survives, so a value containing a comma cannot be written this way. `property:set` also replaces the whole list rather than appending

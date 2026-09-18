@@ -38,7 +38,19 @@ A graph query issued immediately after a write can be answered from the pre-writ
 | immediately | 11 | 9 |
 | after 0.3 s | 20 | 0 |
 
-Writing the file directly with a shell redirect behaves the same way: stale at 0 s, fresh from 0.2 s. Writing through the CLI is still preferable — it keeps any open editor in step — but neither route makes the index synchronous. Re-read before reporting success
+Writing the file directly with a shell redirect behaves the same way: stale at 0 s, fresh from 0.2 s. Neither route makes the index synchronous, so re-read before reporting success. What does separate the two routes is an open editor, below
+
+### A direct write under an open editor can splice the file
+
+A note open in the app with unsaved changes carries a pending autosave, around two seconds behind the last keystroke. A write to that file from outside the app in that moment neither wins nor loses: the editor's save lands over the head of the new content without truncating the file, and the tail of the new content survives. The buffer was `DIRTYBUF` (8 bytes), the external write `EXTERNAL DURING DIRTY\n` (22 bytes), and the delay between the last buffer change and the write varied:
+
+| Delay | On disk afterwards |
+| --- | --- |
+| 0.2 s to 1.8 s | the new content, whole — the app drops the buffer and reloads the view |
+| 2.0 s | `DIRTYBUF DURING DIRTY\n` — spliced |
+| 2.2 s and later | the new content, whole, over the buffer the app had already saved — the edit made in the editor is gone |
+
+Through the app the race is absent: at the same 2.0 s delay, `vault.modify` left the new content whole three times out of three, against three splices out of three for the direct write. A note that is open but untouched takes an external edit safely either way — the view reloads
 
 ### The first call to a vault left alone answers that the command does not exist
 
