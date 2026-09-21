@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Needs bash 3.2 and POSIX tools only, so the behaviour half runs unchanged under the bash
-# a macOS runner has
+# Needs bash 3.2; the behaviour half runs unchanged under the bash a macOS runner has
 # A check that has never failed is a decoration
 set -euo pipefail
 
