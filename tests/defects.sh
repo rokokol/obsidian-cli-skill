@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2016 # every $ in a single-quoted text here is text to find, never an expansion
+# shellcheck disable=SC2016 # every $ in a single-quoted text here is text to find, not an expansion
 # The defect list for this repository, read by the tests skill's harness, vendored beside
 # it, and run by .github/workflows/falsify.yml:
 #

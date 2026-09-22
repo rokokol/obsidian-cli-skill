@@ -118,7 +118,7 @@ check_lint() {
   else
     echo "   against the recording of $(head -n 1 tests/obsidian-help.txt | cut -d' ' -f2-5); set OBSIDIAN_CLI to hold it to a live app"
   fi
-  declared_of() { # declared_of [FILE] -> the "command" and "command parameter" lines a help declares
+  declared_of() { # declared_of [FILE] -> the "command" and "command parameter" lines of a help
     # The help's shape: `vault=` under Options is every command's, a command sits at two
     # spaces under Commands, and its parameters at four, `file=<name>` or a flag like `total`
     awk '/^Options:/ { opt = 1; next }
