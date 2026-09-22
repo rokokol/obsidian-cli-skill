@@ -40,7 +40,7 @@ $ ./obsi.sh --vault Vault find coastline --alias | wc -l
 2
 ```
 
-Six notes contain the word; two of them *answer to* it. `search` returns all six as bare paths with nothing to separate them, and no parameter narrows it — the command set cannot express "notes whose alias is this" at all. The nearest thing, `file file=<name>`, resolves wikilink-style by filename and **fails on an alias**: `file file="Qwibble"` on a note whose alias is `Qwibble` answers `Error: File "Qwibble" not found.`
+Six notes contain the word; two of them *answer to* it. `search` returns all six as bare paths with nothing to separate them, and no parameter narrows it — the command set cannot express "notes whose alias is this" at all. The nearest thing, `file file=<name>`, resolves wikilink-style by filename and **fails on an alias**: on a note whose alias is `Qwibble`, `file file="Qwibble"` answers `Error: File "Qwibble" not found.` and stops there
 
 So `find` reads names, tags, properties and headings from the metadata index, takes bodies from `search`, and merges the two into one ranked list:
 
