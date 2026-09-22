@@ -74,6 +74,12 @@ check_lint() {
   shellcheck "${scripts[@]}"
   shfmt -d -i 2 -ci "${scripts[@]}"
 
+  echo "== the Nix this repository holds is formatted"
+  # A `formatter` output nothing runs is a declaration, not a rule. nixfmt rather than
+  # `nix fmt`, because the second needs the flake and this is the binary the wrapper calls
+  nixfmt --check ./*.nix ||
+    fail "a .nix file here is not what nixfmt writes — run nix fmt"
+
   echo "== the workflows are valid, and their tools come from the lock rather than a registry"
   [[ -d .github/workflows ]] || fail ".github/workflows is missing — nothing gates this repository"
   actionlint
