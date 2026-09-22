@@ -46,7 +46,7 @@ npx skills add -g rokokol/obsidian-cli-skill
 Claude Code also takes it as a plugin:
 
 ```
-/plugin marketplace add rokokol/obsidian-cli-skill
+/plugin marketplace add rokokol/skills
 /plugin install obsidian-cli@rokokol-skills
 ```
 
