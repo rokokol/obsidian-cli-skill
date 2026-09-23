@@ -42,7 +42,7 @@ cd "$HERE"
 
 # One source of truth for what gets linted. A second copy of this list drifts, and a
 # drifted list lies about what was checked.
-scripts=(check.sh check-sh.sh check-skill.sh check-pins.sh check-changelog.sh check-interface.sh vendor-sync.sh check-obsi.sh obsi.sh tests/stub-cli.sh tests/defects.sh)
+scripts=(check.sh check-sh.sh check-skill.sh check-pins.sh check-changelog.sh check-interface.sh check-prose.sh vendor-sync.sh check-obsi.sh obsi.sh tests/stub-cli.sh tests/defects.sh)
 skill_name=obsidian-cli
 
 fail() {
@@ -97,6 +97,12 @@ check_lint() {
   # The pin guard proves on every run that it catches each unpinned shape and stays quiet on
   # the pinned spellings, then scans the workflows
   ./check-pins.sh
+
+  echo "== every document keeps the house rules a script can decide"
+  # The prose rules, vendored from the create-readme skill: a paragraph on one line, no
+  # full stop closing one, plain quotation marks. It proves each of its own rules able to
+  # fail on every run, so nothing here has to
+  ./check-prose.sh README.md SKILL.md CHANGELOG.md references/*.md
 
   echo "== SKILL.md loads, every reference is reachable, and every link and anchor resolves"
   # The one gate every skill repository shares, copied verbatim from the ci skill. It plants
