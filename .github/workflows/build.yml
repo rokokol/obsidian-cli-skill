@@ -33,3 +33,13 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - name: check.sh (the gate, self-tested against known-bad fixtures)
         run: nix develop --no-write-lock-file -c ./check.sh
+
+  # The bash 3.2 half of the gate, for the cascade alone. vendor-sync.yml verifies a
+  # branch by calling this workflow, so a copy that breaks the 3.2 claim would land
+  # green without this job. An ordinary push has no inputs.ref and skips it, because
+  # macos.yml runs on its own trigger there, which is where its badge comes from
+  bash32:
+    if: inputs.ref != ''
+    uses: ./.github/workflows/macos.yml
+    with:
+      ref: ${{ inputs.ref }}
