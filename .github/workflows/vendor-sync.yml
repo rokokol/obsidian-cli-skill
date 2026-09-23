@@ -6,6 +6,10 @@ name: vendor-sync
 # repository's real build workflow against it, and lands it only on green; red leaves the
 # dated branch standing, with the new copies on it, for a human to look at. How it works:
 # references/bump-cascade.md in https://github.com/rokokol/ci-skill
+#
+# This variant is for a repository that also carries macos.yml: verify-macos below reaches
+# it directly, the same way verify reaches build.yml, so a copy that breaks the macOS claim
+# does not land green. A repository with no macos.yml takes vendor-sync.yml instead
 on:
   schedule:
     # Ahead of any dependency bump in the same repository, so a week's fixes to the shared
@@ -65,9 +69,20 @@ jobs:
     with:
       ref: ${{ needs.bump.outputs.branch }}
 
+  # The other platform the flake builds for, reached the same way as verify: a plain job
+  # with the same guard, calling the repository's own macos.yml with the branch. Without
+  # this, a copy that breaks the bash 3.2 claim lands green, because verify alone only ever
+  # asks Linux
+  verify-macos:
+    needs: bump
+    if: needs.bump.outputs.moved == '1'
+    uses: ./.github/workflows/macos.yml
+    with:
+      ref: ${{ needs.bump.outputs.branch }}
+
   # Red leaves the branch alone, with the copies on it, so the failure can be looked at
   land:
-    needs: [bump, verify]
+    needs: [bump, verify, verify-macos]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
