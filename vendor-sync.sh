@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Needs bash 3.2, git and POSIX tools only.
+# Needs bash 3.2, git and POSIX tools only
 set -euo pipefail
 
 usage() {
@@ -21,7 +21,7 @@ to run over such a copy, then takes each source's current HEAD and replaces ever
 whose content moved, with its line; a copy whose content did not move keeps its line, so
 a source's unrelated commits never touch the lock. add takes a new copy and writes its
 line. A PATH ending in / is a directory kept whole: a file deleted or added in the source
-is deleted or added here; one holding a symlink is refused, since a copy cannot keep it.
+is deleted or added here; one holding a symlink is refused, since a copy cannot keep it
 
 A copy that lands under .github/workflows/ is taken only with --manual: the token a
 workflow runs with cannot push a workflow file, so such copies are refreshed by a person.
@@ -29,9 +29,9 @@ update takes the ordinary lines, and names each manual line whose source has mov
 rather than skipping it in silence; update --manual takes the manual lines and only
 those. BASE is where OWNER/REPO is fetched from (default https://github.com, file://DIR
 for a local source), and a source has to be reachable there without credentials. Run it
-from the repository root.
+from the repository root
 
-Exit 1 with `vendor-sync: <what>` on a finding or a failed fetch, 2 on a usage error.
+Exit 1 with `vendor-sync: <what>` on a finding or a failed fetch, 2 on a usage error
 EOF
 }
 

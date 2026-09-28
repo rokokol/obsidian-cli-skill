@@ -2,7 +2,9 @@
 # Other repositories take this file through the vendoring cascade (references/bump-cascade.md
 # in https://github.com/rokokol/ci-skill): a copy is never edited in place, a change is made
 # here and reaches them from here
-# Needs bash 3.2 and POSIX tools only, so it runs on a macOS runner unchanged
+# Needs bash 3.2 and POSIX tools only for its own code, so it runs on a macOS runner
+# unchanged; the script it is given is read as a tree, by shfmt and jq, and without them
+# only the checks that ask this bash a question run (--bash-only)
 set -euo pipefail
 
 usage() {
@@ -14,8 +16,7 @@ dispatcher has, every flag its parsers take, every variable it reads and every c
 exits with must be in the help — and every document and completion that restates a list
 is held to the same code, in both directions. Each check is proven able to fail on every
 run, on a canonical script with one defect planted, so a copy falsifies itself wherever
-it runs. It has no repo-specific part: a repository takes it through the vendoring
-cascade and calls it from its own gate
+it runs. It has no repo-specific part, and belongs in a repository's own gate
 
   check-sh.sh [-n NAME] [-e PREFIX] [-d DOC]... [-m DOC]... [-c BASH ZSH] SCRIPT
   check-sh.sh --template [script|bash|zsh]
@@ -29,6 +30,11 @@ cascade and calls it from its own gate
   -m DOC       a document that mentions only some of them and sends the reader to the
                help for the rest: every `NAME word` it spells must be real; repeatable
   -c BASH ZSH  the two completion files, checked both ways
+  -b, --bash-only
+               run only the checks that ask this bash a question, and none that read the
+               script as a tree; it needs no shfmt and no jq. It exists for a runner that
+               has neither, says in the summary that the tree half was skipped, and is
+               never chosen on its own — a missing tool is a refusal, not a quiet pass
   --template   print the canonical script, or its bash or zsh completion, and exit
 
 The shapes it reads are the standard's own: a `case "$cmd"` dispatcher at the top level
@@ -45,7 +51,9 @@ CHECK_SH_NESTED=1 runs the checks and skips the self-test. The self-test runs it
 way, and so should a gate that calls this script more than once in one run: the copy and
 its tools are the same for every call, so proving it again proves nothing new. The first
 call of every run keeps it: it is what notices a copy that stopped catching defects, and
-the bash and tools under a copy change without the copy changing
+the bash and tools under a copy change without the copy changing. A call with a finding
+exits 1 before the self-test, so the call that keeps it is one that passes, and the
+variable changes nothing on a call meant to go red
 
 Nothing here reaches the network
 Exit 0 when everything agrees, 1 with one `check-sh: <what>` line per finding, 2 on a
@@ -155,7 +163,7 @@ template_bash() {
 # Tab completion for script.sh in bash. Hand-written on purpose and drift-checked by
 # machine: check-sh.sh -c holds every word here to the script's dispatcher and parsers.
 # Builtins only, so it works without the bash-completion package and under the bash 3.2
-# a stock macOS sources it with.
+# a stock macOS sources it with
 _script_sh() {
   local cur prev words
   cur="${COMP_WORDS[COMP_CWORD]}"
@@ -191,7 +199,7 @@ template_zsh() {
 # Tab completion for script.sh in zsh. Hand-written on purpose and drift-checked by
 # machine: check-sh.sh -c holds every word here to the script's dispatcher and parsers.
 # The #compdef line binds it when the file sits on $fpath as _script.sh, and the last
-# line calls the function, which is the autoload convention.
+# line calls the function, which is the autoload convention
 _script_sh() {
   local -a subcommands
   subcommands=(
@@ -227,8 +235,13 @@ mentions=()
 comp_bash=""
 comp_zsh=""
 script=""
+bash_only=0
 while (($#)); do
   case "$1" in
+    -b | --bash-only)
+      bash_only=1
+      shift
+      ;;
     -n)
       (($# >= 2)) || die "-n needs a name"
       name="$2"
@@ -299,68 +312,288 @@ finding() {
 work=$(mktemp -d "${TMPDIR:-/tmp}/check-sh.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 
-# The code as the checker reads it, line numbers kept. Every heredoc body is blanked: a
-# help text or a template inside one carries dispatchers, flag rows and exit lines of its
-# own, which are not this script's. The opening line stays, since it can carry code. A
-# `<<WORD` opens a heredoc only outside quotes and comments: read inside a string as an
-# opener, it blanked the rest of the file. With 1 the inside of every single-quoted string
-# is blanked too: single quotes suppress every expansion, so what they hold runs nothing
-# and a construct named there is none of the script's. With 2 double-quoted text goes as
-# well, and that copy is for the command-shaped patterns alone — a `declare -A` inside a
-# message is prose, and a gate proving a bash is 3.2 has to write it. The expansion-shaped
-# patterns keep reading double quotes, because `echo "${v,,}"` is a use and not a mention:
-# double quotes suppress nothing. Quotes are tracked across lines, since an awk or sed
-# program spans several
-mask_code() { # mask_code FILE 0|1|2 -> heredoc bodies, single-quoted text at 1, double too at 2
-  awk -v sq="$2" '
-    inhd {
-      line = $0
-      if (dash) sub(/^\t+/, "", line)
-      if (line == term) inhd = 0
-      print ""
-      next
-    }
-    {
-      out = ""
-      opener = ""
-      n = length($0)
-      for (i = 1; i <= n; i++) {
-        c = substr($0, i, 1)
-        if (q == "\047") {
-          if (c == "\047") { q = ""; out = out c } else out = out (sq >= 1 ? " " : c)
-          continue
-        }
-        # $'"'"'...'"'"', where a backslash escapes the quote rather than standing for itself
-        if (q == "$") {
-          if (c == "\\") { out = out (sq >= 1 ? "  " : substr($0, i, 2)); i++; continue }
-          if (c == "\047") { q = ""; out = out c } else out = out (sq >= 1 ? " " : c)
-          continue
-        }
-        if (q == "\"") {
-          if (c == "\\") { out = out (sq >= 2 ? "  " : substr($0, i, 2)); i++; continue }
-          if (c == "\"") { q = ""; out = out c; continue }
-          out = out (sq >= 2 ? " " : c)
-          continue
-        }
-        if (c == "\\") { out = out substr($0, i, 2); i++; continue }
-        if (c == "#" && (i == 1 || substr($0, i - 1, 1) ~ /[ \t;&|()]/)) { out = out substr($0, i); break }
-        if (substr($0, i, 2) == "$\047") { q = "$"; out = out substr($0, i, 2); i++; continue }
-        if (c == "\047" || c == "\"") { q = c; out = out c; continue }
-        if (opener == "" && substr($0, i, 2) == "<<" && substr($0, i, 3) != "<<<" && (i == 1 || substr($0, i - 1, 1) != "<") &&
-          match(substr($0, i), /^<<-?[\047"]?[A-Za-z_][A-Za-z0-9_]*/))
-          opener = substr($0, i, RLENGTH)
-        out = out c
-      }
-      print out
-      if (opener != "") {
-        dash = (substr(opener, 3, 1) == "-")
-        sub(/^<<-?[\047"]?/, "", opener)
-        term = opener
-        inhd = 1
-      }
-    }
-  ' "$1"
+# ---- the tree -------------------------------------------------------------------------
+# `shfmt --to-json` emits mvdan.cc/sh's whole syntax tree, with a line number on every
+# node, and the jq program below flattens it into one row per fact. The rules above read
+# those rows with awk and grep, as they always have, so the non-POSIX dependency lives in
+# this one stage: a change in shfmt's JSON is a change to this program and to nothing else
+#
+# The columns are LINE, KIND, FN, SUBST, OWNER, A, B. FN is the outermost enclosing
+# function, which is what the awk lexer above tracks — it matches a function opening at
+# column 0 — so both read a nested function's contents as its outermost one's. SUBST is 1
+# inside `$( )` and `<( )` and 0 inside backticks and `$(( ))`, which is exactly the
+# bash 3.2 heredoc rule
+facts_jq() {
+  cat <<'JQ'
+def part_text:
+  if .Type == "Lit" or .Type == "SglQuoted" then (.Value // "")
+  elif .Type == "DblQuoted"
+    then (if [(.Parts // [])[] | .Type] | all(. == "Lit")
+          then [(.Parts // [])[] | .Value] | join("") else null end)
+  else null end;
+
+# A word's literal text when every part is literal, "$" when anything in it expands
+def word_text:
+  if . == null then "-"
+  elif (.Parts // []) | length == 0 then ""
+  else ([.Parts[] | part_text] | if any(. == null) then "$" else join("") end) end;
+
+# `"$cmd"` is a DblQuoted holding a ParamExp; `$cmd` is the ParamExp bare
+def case_word:
+  (.Parts[0] // {}) as $p
+  | if $p.Type == "ParamExp" then "$" + $p.Param.Value
+    elif $p.Type == "DblQuoted" and (($p.Parts[0] // {}).Type == "ParamExp")
+      then "$" + $p.Parts[0].Param.Value
+    else ($p.Value // "?") end;
+
+# What an assignment is worth as text: the word, or an array's elements joined. A list
+# wrapped onto a second line is one array either way, which a reader of the text has to
+# work out and a reader of the tree does not
+def assign_text:
+  (if .Array then ([(.Array.Elems // [])[] | (.Value | word_text)] | join(" "))
+   else ((.Value // null) | word_text) end)
+  | if . == "" then "-" else . end;
+
+def emit($fn; $subst):
+  if type == "array" then (.[] | emit($fn; $subst))
+  elif type != "object" then empty
+  else
+    if .Type == "FuncDecl" then
+      [.Pos.Line, "func", $fn, $subst, "-", .Name.Value, (.End.Line | tostring)],
+      # The name binds before the descent, so the outermost declaration keeps FN
+      (.Name.Value as $n
+       | .Body | emit((if $fn == "-" then $n else $fn end); $subst))
+
+    elif .Type == "CaseClause" then
+      (.Pos.Line as $c
+       | [.Pos.Line, "case", $fn, $subst, "-", (.Word | case_word), (.End.Line | tostring)],
+         (.Items[]?
+          # B is the arm's last line, which is what scopes a row to an arm: a redirection
+          # or a comment belongs to the arm whose range holds its line
+          | [.Pos.Line, "arm", $fn, $subst, ($c | tostring),
+             ([.Patterns[]? | word_text] | join("|")), (.End.Line | tostring)],
+            # And a row of its own where the terminator is not the ordinary `;;`, since
+            # `;&` and `;;&` fall through and the bash floor they need is 4.0
+            (if (.Op // ";;") != ";;"
+             then [.Pos.Line, "armop", $fn, $subst, ($c | tostring), .Op, "-"]
+             else empty end),
+            (.Stmts | emit($fn; $subst))))
+
+    # SUBST is 1 inside $( ) and < ( ) and stays 0 inside backticks, which is the bash 3.2
+    # heredoc rule exactly: 3.2 scans a heredoc's body as code while looking for the end of
+    # a $( ), and reads one inside backticks correctly. shfmt marks the second with a
+    # Backquotes key that is absent on the first
+    elif .Type == "CmdSubst" or .Type == "ProcSubst" then
+      # Bound before the pipe: inside .Stmts the dot is the array and the key is gone
+      ((if (.Backquotes // false) then $subst else 1 end) as $s
+       | .Stmts | emit($fn; $s))
+
+    # One row per `|`, naming the reader on its right: which reader it is decides whether
+    # the producer on the left can be killed by SIGPIPE part-way through
+    elif .Type == "BinaryCmd" and (.Op == "|" or .Op == "|&") then
+      ((.Y.Cmd // {}) as $r
+       | [.OpPos.Line, "pipeinto", $fn, $subst, "-",
+          ((($r.Args // [])[0] // null) | word_text),
+          ([($r.Args // [])[1:][]? | word_text] | join(" ") | if . == "" then "-" else . end)]),
+      # `|&` is a 4.0 construct, so the operator gets a row of its own where it is not the
+      # plain `|`, the way an arm's terminator does
+      (if .Op != "|" then [.OpPos.Line, "pipeop", $fn, $subst, "-", .Op, "-"] else empty end),
+      (to_entries[] | .value | emit($fn; $subst))
+
+    elif .Type == "CallExpr" then
+      [.Pos.Line, "call", $fn, $subst, "-",
+       ((.Args[0] // null) | word_text),
+       # "-" rather than the empty string, so no row ends in a tab: the golden table
+       # below is a heredoc, and trailing whitespace there is what an editor eats
+       ([.Args[1:][]? | word_text] | join(" ") | if . == "" then "-" else . end)],
+      # Assigns as well as Args: a bare `v=$(…)` is a CallExpr with no Args at all, so a
+      # descent into Args alone loses every assignment and the substitutions inside them
+      ((.Assigns // [])[] | select(.Name != null)
+       | [.Pos.Line, "assign", $fn, $subst, "-", .Name.Value, assign_text]),
+      (.Args | emit($fn; $subst)), (.Assigns | emit($fn; $subst))
+
+    # A test operator inside `[[ ]]`, one row per operator: `-v` is a 4.2 construct, and a
+    # pattern over text has to tell it from the same two characters inside a string
+    elif .Type == "UnaryTest" or .Type == "BinaryTest" then
+      [.OpPos.Line, "test", $fn, $subst, "-", (.Op // "-"), "-"],
+      (to_entries[] | .value | emit($fn; $subst))
+
+    # declare, local, typeset, export and readonly are a clause of their own and not a
+    # call. A is the word written, B its flags joined, so `declare -rA` and `local -Ar`
+    # answer the same question as `declare -A` — which a pattern over text does not
+    elif .Type == "DeclClause" then
+      [.Pos.Line, "decl", $fn, $subst, "-", (.Variant.Value // "-"),
+       ([(.Args // [])[] | select(.Name == null) | (.Value | word_text)]
+        | join(" ") | if . == "" then "-" else . end)],
+      # A declared variable is an assignment too: `local -a w=(…)` holds a list the same
+      # way `w=(…)` does, and a rule reading assignments should not have to know which
+      ((.Args // [])[] | select(.Name != null)
+       | [.Pos.Line, "assign", $fn, $subst, "-", .Name.Value, assign_text]),
+      (.Args | emit($fn; $subst))
+
+    elif .Type == "ParamExp" then
+      # B is the operator where there is one, and otherwise says which of the two shapes
+      # that carry none this is. A slice with a negative length and a replacement whose
+      # text is quoted or holds & are each a bash floor of their own, and none of the three
+      # is an Exp.Op: shfmt gives a slice its own Slice and a replacement its own Repl
+      ([.Pos.Line, "param", $fn, $subst, "-", (.Param.Value // "-"),
+        # `@Q` and its siblings are one operator and one letter, and only some letters are
+        # 4.4; the letter is the Exp's own word, so B carries both
+        (if .Exp.Op then (.Exp.Op + (if .Exp.Op == "@" then ((.Exp.Word.Parts // [])[0].Value // "") else "" end))
+         elif .Slice then (if (.Slice.Length.Op // "") == "-" then "slice-neg" else "slice" end)
+         elif .Repl then
+           ([(.Repl.With.Parts // [])[]
+             | if (.Type == "DblQuoted" or .Type == "SglQuoted") then "q"
+               elif (.Value // "") | test("&") then "a"
+               else "" end]
+            | join("")
+            | if test("q") then "repl-quoted" elif test("a") then "repl-amp" else "repl" end)
+         else "-" end)]),
+      (to_entries[] | .value | emit($fn; $subst))
+
+    # A redirection carries no "Type" of its own, and Hdoc is absent rather than null
+    # unless it opens a heredoc, so neither can identify one. OpPos it always has, and the
+    # only other nodes carrying OpPos — BinaryCmd, BinaryArithm, UnaryTest — all have a Type
+    elif has("OpPos") and (has("Type") | not) then
+      [.Pos.Line, "redir", $fn, $subst, "-", (.Op // "-"), (.Word | word_text)],
+      # A descriptor named by a variable, `exec {fd}<file`, is a 4.1 construct. shfmt puts
+      # the `{fd}` in the redirection's N, where a plain `2>` leaves it unset
+      (if ((.N.Value // "") | startswith("{"))
+       then [.Pos.Line, "fdvar", $fn, $subst, "-", .N.Value, (.Op // "-")]
+       else empty end),
+      # A is the delimiter as written, quotes kept: `<<'EOF'` and `<<EOF` are the same
+      # word to a reader of text and two different things to bash, since the second
+      # expands the body. help.md asks for the first, and this is what lets it be checked
+      (if (.Hdoc // null) != null
+       then [.Pos.Line, "heredoc", $fn, $subst, "-",
+             (if (((.Word.Parts // [])[0] // {}).Type == "SglQuoted")
+              then "'" + (.Word | word_text) + "'" else (.Word | word_text) end),
+             (.Hdoc.End.Line | tostring)],
+            # And whether the body actually substitutes anything. The body is not walked —
+            # a variable named in a help text is not one the script reads, which is the
+            # whole reason the env check moved off a grep over the file — so the question
+            # is answered here, from the parts, and nothing from inside becomes a row
+            (if [(.Hdoc.Parts // [])[] | .Type] | any(. != "Lit")
+             then [.Pos.Line, "heredocexp", $fn, $subst, "-",
+                   (.Word | word_text), (.Hdoc.End.Line | tostring)]
+             else empty end)
+       else empty end),
+      (.Word | emit($fn; $subst))
+
+    else (to_entries[] | .value | emit($fn; $subst))
+    end
+  end;
+
+# Comments hang off the statements they precede rather than off the file, and carry no
+# "Type" either; Hash, the position of the `#`, is what marks one. They are gathered in
+# their own pass so that the descent above stays about code
+[.. | objects | select(has("Hash"))
+ | [.Pos.Line, "comment", "-", 0, "-", .Text, "-"]] as $c
+| ($c[], (.Stmts | emit("-"; 0)))
+| @tsv
+JQ
 }
+
+read_tree() { # read_tree FILE -> the facts table on stdout
+  # --to-json reads stdin only, measured; --filename is what lets the dialect be guessed,
+  # and it is taken before the pipeline so the file is named once inside it
+  local f="$1" base
+  base=$(basename -- "$f")
+  shfmt --to-json --filename "$base" -ln auto <"$f" | jq -r "$(facts_jq)"
+}
+
+# A script exercising every kind of row the table has, and the table it must produce. The
+# pair is the frontend's own regression test and, on every run that reads a tree, the
+# check that shfmt's JSON still has the shape this program reads
+#
+# shfmt moved that shape once: 3.13.1 wrote `"Op": 71` where 3.14.1 writes `"Op": "<<"`.
+# A version number is a proxy for the shape, so nothing here compares one — this compares
+# the shape itself, which is what a rule downstream actually depends on. It runs before
+# any rule reads a row, so a shape that moved is one refusal naming the tool rather than a
+# scattering of findings, or worse a quiet under-report
+tree_probe() {
+  cat <<'PROBE'
+#!/usr/bin/env bash
+# probe
+declare -A m
+f() {
+  case "$1" in
+    -n | --dry) echo "x" ;;&
+  esac
+  cat <<'HD'
+body
+HD
+  g="${2:?need}"
+  h=$(printf '%s' ok)
+  echo a | grep -q b
+  [[ -v g ]]
+  i="${g:1:-2}${g//x/"y"}"
+}
+PROBE
+}
+
+# What the probe must flatten to. A run that disagrees prints the table it got, which is
+# both the diagnosis and the replacement for this heredoc — read that diff like code, since
+# pasting it unread turns whatever shfmt started doing into what this file expects
+tree_golden() {
+  cat <<'GOLDEN'
+1	comment	-	0	-	!/usr/bin/env bash	-
+2	comment	-	0	-	 probe	-
+3	decl	-	0	-	declare	-A
+3	assign	-	0	-	m	-
+4	func	-	0	-	f	16
+5	case	f	0	-	$1	7
+6	arm	f	0	5	-n|--dry	6
+6	armop	f	0	5	;;&	-
+6	call	f	0	-	echo	x
+8	call	f	0	-	cat	-
+8	redir	f	0	-	<<	HD
+8	heredoc	f	0	-	'HD'	10
+11	call	f	0	-	-	-
+11	assign	f	0	-	g	$
+11	param	f	0	-	2	:?
+12	call	f	0	-	-	-
+12	assign	f	0	-	h	$
+12	call	f	1	-	printf	%s ok
+13	pipeinto	f	0	-	grep	-q b
+13	call	f	0	-	echo	a
+13	call	f	0	-	grep	-q b
+14	test	f	0	-	-v	-
+15	call	f	0	-	-	-
+15	assign	f	0	-	i	$
+15	param	f	0	-	g	slice-neg
+15	param	f	0	-	g	repl-quoted
+GOLDEN
+}
+
+# Both tools, then the shape, before a single rule reads a row
+tree_preflight() {
+  local missing=""
+  command -v shfmt >/dev/null 2>&1 || missing="shfmt"
+  command -v jq >/dev/null 2>&1 || missing="${missing:+$missing and }jq"
+  [[ -z "$missing" ]] ||
+    die "needs $missing to read SCRIPT as a tree, and nix develop -c is where the pinned one lives; on a machine with neither, --bash-only runs the checks that ask this bash and says so"
+
+  tree_probe >"$work/probe.sh"
+  read_tree "$work/probe.sh" >"$work/probe.tsv" 2>"$work/probe.err" ||
+    die "shfmt or jq could not read the built-in probe: $(tr '\n' ' ' <"$work/probe.err")"
+  tree_golden >"$work/probe.want"
+  # The table it did produce goes with the refusal: it is what says how the shape moved,
+  # and it is what replaces tree_golden's heredoc once a person has read the difference
+  cmp -s "$work/probe.tsv" "$work/probe.want" || {
+    printf 'check-sh: the tree from shfmt %s is not the one tree_golden describes — either the tool moved or the table did, and 3.14.0 is the oldest known to agree\n' \
+      "$(shfmt --version 2>/dev/null || echo '(version unknown)')" >&2
+    printf 'check-sh: the probe flattened to this instead, which is what tree_golden would become:\n' >&2
+    sed 's/^/  /' "$work/probe.tsv" >&2
+    exit 2
+  }
+}
+
+# Run it here, as soon as the frontend exists and long before any rule reads a row, so a
+# machine without the tools is refused rather than quietly checked with less. Degrading on
+# a missing tool was rejected: an extractor that finds nothing must never read as "nothing
+# drifted", or a bare machine exits 0 and believes the help agrees with the code
+((bash_only)) || tree_preflight
 
 # ERE-quoted, so a name with a dot matches itself and nothing else
 name_re=$(printf '%s' "$name" | sed 's/[][\\.*^$/+?(){}|]/\\&/g')
@@ -448,75 +681,126 @@ proxy_only=0
   # BSD sed around it is an ordinary macOS machine, and its flags are the ones that differ
   posix_tools=0
   ! grep -q 'POSIX tools only' <<<"$header" || posix_tools=1
-  code="$work/code"
-  mask_code "$script" 0 >"$code"
-  code_sq="$work/code_sq"
-  mask_code "$script" 1 >"$code_sq"
-  # A third copy with double-quoted text blanked as well, for the patterns that look for a
-  # command rather than an expansion: see mask_code's comment for why the two differ
-  code_dq="$work/code_dq"
-  mask_code "$script" 2 >"$code_dq"
 
-  # The dispatcher: the top-level `case "$cmd" in` … `esac`, one arm per subcommand,
-  # `a | b)` split into two. The help arm and the refusal arms are not subcommands.
-  # shellcheck disable=SC2016 # `$cmd` is matched literally, in the script's own text
-  dispatch=$(sed -n '/^case "\$cmd" in$/,/^esac$/p' "$code")
-  if [[ -n "$dispatch" ]]; then
+  # The table, read once and shared by every rule that has moved onto it. Under --bash-only
+  # there is none, and the rules below that need one do not run; the summary says so
+  tree="$work/tree.tsv"
+  : >"$tree"
+  ((bash_only)) || if ! read_tree "$script" >"$tree" 2>"$work/tree.err"; then
+    # Whose problem it is, decided by the parser that matters: a script this bash rejects
+    # is reported below in bash's own words, which is where the message belongs and what
+    # the self-test expects. One bash parses and shfmt does not is the two disagreeing,
+    # and then there is no tree to read and nothing here can stand in for it
+    : >"$tree"
+    if "$BASH" -n "$script" 2>/dev/null; then
+      die "shfmt cannot read $name, which this bash parses: $(tr '\n' ' ' <"$work/tree.err")"
+    fi
+  fi
+
+  # The dispatcher: the top-level `case "$cmd"`, one arm per subcommand, `a | b)` split
+  # into two. The help arm and the refusal arms are not subcommands. Read from the tree,
+  # so a `case "$cmd"` written inside a string or a heredoc is text and not a dispatcher,
+  # and one indented or spelled `case $cmd` is still found
+  # Every top-level `case "$cmd"`, not the first: a script may answer -h before the tools
+  # its subcommands need are looked for, and that pre-dispatch is a `case "$cmd"` of its
+  # own. The arms of all of them together are the dispatcher
+  disp_line=$(awk -F'\t' '$2 == "case" && $3 == "-" && $6 == "$cmd" { print $1 }' "$tree")
+  if [[ -n "$disp_line" ]]; then
     while IFS= read -r arm; do
       [[ -n "$arm" && "$arm" != help ]] || continue
       subs+=("$arm")
-    done < <(printf '%s\n' "$dispatch" |
-      sed -n 's/^  \([a-z][a-z0-9-]*\( *| *[a-z][a-z0-9-]*\)*\)).*/\1/p' | tr '|' '\n' | tr -d ' ')
+    done < <(awk -F'\t' '
+      NR == FNR { if ($2 == "case" && $3 == "-" && $6 == "$cmd") d[$1] = 1; next }
+      $2 == "arm" && ($5 in d) {
+        n = split($6, p, "|")
+        for (i = 1; i <= n; i++) if (p[i] ~ /^[a-z][a-z0-9-]*$/) print p[i]
+      }' "$tree" "$tree")
     # The *) arm refuses, and a refusal is not output: a usage printed there goes to stderr.
     # A wrapper's *) arm passes the word through to another tool instead, and says so with
     # the comment `# pass-through` inside the arm; then the subcommand set is open — the
     # help and the docs may name commands the dispatcher never spells — and only the flags
     # stay closed. A declaration rather than a guess: whether an arm refuses is decided by
     # the helper it calls, which no grep can see
-    refusal=$(printf '%s\n' "$dispatch" | sed -n '/^  \([^)]* | \)\{0,1\}\*)/,/;;/p')
-    [[ -n "$refusal" ]] || finding "$name's dispatcher has no *) arm to refuse an unknown subcommand"
-    usage_rows=$(grep -E '(^|[^[:alnum:]_])usage([^[:alnum:]_]|$)' <<<"$refusal" || :)
-    # Not <<<"" on an empty list: a here-string of nothing is still one empty line, which
-    # `grep -v` matches, and the finding would fire on an arm with no usage at all
-    [[ -z "$usage_rows" ]] || ! grep -qv '>&2' <<<"$usage_rows" ||
-      finding "$name's *) arm prints its usage to stdout rather than stderr"
-    ! grep -q '# pass-through' <<<"$refusal" || open_set=1
+    # The refusal arm, as a line range: an arm row carries its own last line, so every
+    # other row is inside it or is not, and no text has to be re-read to find out
+    refusal_range=$(awk -F'\t' '
+      NR == FNR { if ($2 == "case" && $3 == "-" && $6 == "$cmd") d[$1] = 1; next }
+      $2 == "arm" && ($5 in d) {
+        n = split($6, p, "|")
+        for (i = 1; i <= n; i++) if (p[i] == "*") { print $1 "\t" $7; exit }
+      }' "$tree" "$tree")
+    [[ -n "$refusal_range" ]] || finding "$name's dispatcher has no *) arm to refuse an unknown subcommand"
+    if [[ -n "$refusal_range" ]]; then
+      refusal_from=${refusal_range%%$'\t'*}
+      refusal_to=${refusal_range##*$'\t'}
+      # A refusal is not output, so its usage goes to stderr. A call to usage inside the
+      # arm and a `>&2` on the same line are both rows, and the line joins them
+      usage_lines=$(awk -F'\t' -v a="$refusal_from" -v b="$refusal_to" '
+        $2 == "call" && $1 >= a && $1 <= b && $6 == "usage" { print $1 }' "$tree")
+      while IFS= read -r ul; do
+        [[ -n "$ul" ]] || continue
+        awk -F'\t' -v l="$ul" '$2 == "redir" && $1 == l && $6 == ">&" && $7 == "2" { found = 1 }
+          END { exit !found }' "$tree" ||
+          finding "$name's *) arm prints its usage to stdout rather than stderr"
+      done <<<"$usage_lines"
+      # A wrapper's *) arm passes the word through to another tool instead, and says so
+      # with the comment `# pass-through` inside the arm; then the subcommand set is open —
+      # the help and the docs may name commands the dispatcher never spells — and only the
+      # flags stay closed. A declaration rather than a guess: whether an arm refuses is
+      # decided by the helper it calls, which no reading of the code can see
+      ! awk -F'\t' -v a="$refusal_from" -v b="$refusal_to" '
+        $2 == "comment" && $1 >= a && $1 <= b && $6 ~ /pass-through/ { found = 1 }
+        END { exit !found }' "$tree" || open_set=1
+    fi
   fi
 
-  # The flags: every `-x | --long)` arm, attributed to the cmd_<sub>() function it sits
-  # in, or global when it sits in no function. Arms in any other function are not a
-  # parser of this script's own flags and are left alone. The function is found by its
-  # opening line at column 0, so a nested case is read as its function's.
+  # The flags: every arm pattern that is a flag, attributed to the cmd_<sub>() function it
+  # sits in, or global when it sits in none. Arms in any other function are not a parser of
+  # this script's own flags and are left alone. A pattern is read one at a time, so a flag
+  # is a flag wherever it sits — `-v | --version)` on the dispatcher is a global flag the
+  # help must list, beside `run)` which is a subcommand
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
     flags+=("$line")
-  done < <(awk '
-    # A one-line function, `usage() { …; }`, opens and closes on the same line
-    /^[a-z_][a-z0-9_]*\(\) \{/ && !/\}[[:space:]]*$/ { fn = $0; sub(/\(\).*/, "", fn); next }
-    /^}/ { fn = ""; next }
-    match($0, /^ *(--?[a-zA-Z][a-zA-Z0-9-]*)( *\| *--?[a-zA-Z][a-zA-Z0-9-]*)*\)/) {
-      line = substr($0, RSTART, RLENGTH)
-      sub(/\)$/, "", line)
-      gsub(/ /, "", line)
-      n = split(line, parts, "|")
+  done < <(awk -F'\t' '
+    $2 == "arm" && $6 ~ /^-/ {
       owner = "-"
-      if (fn != "") {
-        if (substr(fn, 1, 4) == "cmd_") { owner = substr(fn, 5); gsub(/_/, "-", owner) } else next
+      if ($3 != "-") {
+        if (substr($3, 1, 4) != "cmd_") next
+        owner = substr($3, 5); gsub(/_/, "-", owner)
       }
-      for (i = 1; i <= n; i++) print owner "\t" parts[i]
-    }' "$code")
+      n = split($6, p, "|")
+      for (i = 1; i <= n; i++) if (p[i] ~ /^--?[a-zA-Z]/) print owner "\t" p[i]
+    }' "$tree")
+
   # A plain script with no dispatcher and no flag has no help for anything to agree with.
   # If its header claims bash 3.2 the proxy below is still worth running, and it is all
   # that runs; with no claim either there is nothing to check, which is a refusal
-  if ((${#subs[@]} + ${#flags[@]} == 0)); then
+  # Under --bash-only both lists are empty because no tree was read, which is a fact about
+  # the run and not about the script, so the refusal below would be a lie and is not made
+  if ((${#subs[@]} + ${#flags[@]} == 0 && bash_only == 0)); then
     ((floor || posix_tools)) ||
       die "nothing to check in $script: no case \"\$cmd\" dispatcher, no flag arms and no bash floor or POSIX userland claim — see references/shape.md"
     proxy_only=1
   fi
+  # Under --bash-only the whole run is that proxy. No tree was read, so every check below
+  # would hold the help against an empty list, and reaching the help at all means running
+  # the script: a list of defects meant to be sourced answers 127 and prints a line per
+  # call it could not resolve
+  ((bash_only == 0)) || proxy_only=1
   # The help arm is spelled one way, so a reader and a completion can count on all three.
   # A wrapper passes `help` through to the tool behind it, whose help is the better one,
   # so it may answer -h and --help as flags before the dispatcher instead
-  if [[ -n "$dispatch" ]] && ! grep -qE '^  -h \| --help \| help\)' <<<"$dispatch"; then
+  # The patterns come out of the table already split, so the three are compared as a set
+  # and the spelling of the spaces around the bars is the formatter's business, not this
+  # check's — which is what it was reading before
+  help_arm=0
+  [[ -z "$disp_line" ]] ||
+    ! awk -F'\t' '
+      NR == FNR { if ($2 == "case" && $3 == "-" && $6 == "$cmd") d[$1] = 1; next }
+      $2 == "arm" && ($5 in d) && $6 == "-h|--help|help" { found = 1 }
+      END { exit !found }' "$tree" "$tree" || help_arm=1
+  if [[ -n "$disp_line" ]] && ((help_arm == 0)); then
     flag_rows=$(printf '%s\n' "${flags[@]+"${flags[@]}"}")
     if ! { ((open_set)) && grep -qx -- $'-\t--help' <<<"$flag_rows"; }; then
       finding "$name's dispatcher has no -h | --help | help arm"
@@ -524,7 +808,7 @@ proxy_only=0
   fi
 }
 
-known_sub() { # known_sub WORD -> 0 when the dispatcher has it, or it is the help, or the set is open
+known_sub() { # known_sub WORD -> 0 when the dispatcher has it, or it is help, or the set is open
   local s
   [[ "$1" != help ]] || return 0
   ((open_set == 0)) || return 0
@@ -559,116 +843,102 @@ known_flag() { # known_flag FLAG [SUB] -> 0 when SUB (or any parser) accepts it,
 # lowercases at runtime, so those keep reading inside them
 version_rows() {
   cat <<'ROWS'
-400	cmd	(^|[^-A-Za-z0-9_])mapfil[e][[:space:]]
-400	cmd	(^|[^-A-Za-z0-9_])readarra[y][[:space:]]
-400	cmd	(^|[^-A-Za-z0-9_])declar[e] -A
-400	cmd	(^|[^-A-Za-z0-9_])loca[l] -A
-400	exp	\$\{[A-Za-z_]+,[,]\}
-400	exp	\$\{[A-Za-z_]+\^[\^]\}
-400	cmd	;;[&]
-400	cmd	[^|]\|[&][^&]
-400	cmd	(^|[^-A-Za-z0-9_])rea[d] [^;|&]*-t ?[0-9]*[.][0-9]
-400	cmd	(^|[^-A-Za-z0-9_])globsta[r]
-401	cmd	(^|[^$])[{][A-Za-z_][A-Za-z0-9_]*[}][<>]
-402	exp	\[\[[^]]*[-]v [A-Za-z_]
-402	exp	\$\{[A-Za-z_][A-Za-z0-9_]*:[^}:]*:[-][0-9]
-403	cmd	(^|[^-A-Za-z0-9_])declar[e] -n
-403	cmd	(^|[^-A-Za-z0-9_])loca[l] -n
-403	cmd	(^|[^-A-Za-z0-9_])wai[t] -n
-404	exp	\$\{[A-Za-z_]+@[QEPAaKk]\}
-502	exp	\$\{[A-Za-z_][A-Za-z0-9_]*//?[^/}]*/["]
-502	exp	\$\{[A-Za-z_][A-Za-z0-9_]*//?[^/}]*/[^}]*[&]
+400	call	mapfile	.
+400	call	readarray	.
+400	decl	declare|local|typeset	A
+400	param	.	^,,$|^\^\^$
+400	armop	;;&	.
+400	pipeop	\|&	.
+400	call	read	(^| )-t ?[0-9]*[.][0-9]
+400	call	shopt	globstar
+401	fdvar	.	.
+402	test	-v	.
+402	param	.	^slice-neg$
+403	decl	declare|local|typeset	n
+403	call	wait	(^| )-n( |$)
+404	param	.	^@[QEPAaKk]$
+502	param	.	^repl-quoted$|^repl-amp$
+bsd	call	^sort$	(^| )-[A-Za-z]*V
+bsd	call	^grep$	(^| )-[A-Za-z]*P
+bsd	call	^grep$	--exclude-dir
+bsd	call	^readlink$	(^| )-f( |$)
+bsd	call	^date$	(^| )-d( |$)
+bsd	call	^mktemp$	(^| )(-[pt]|--tmpdir|--suffix)
+bsd	call	^sed$	(^| )-[A-Za-z]*i( |$)|--in-place
+bsd	call	^timeout$	^[0-9]
+bsd	call	^tar$	--wildcards|--null
 ROWS
 }
-active_cmd=''
-active_exp=''
-# No claim, no proxy: a script that declares no floor has promised nothing about where it
-# runs, and every construct below would be a finding against a promise nobody made
-if ((floor)); then
-  while IFS="$(printf '\t')" read -r need kind pat; do
-    [[ -n "$need" ]] || continue
-    ((need > floor)) || continue
-    if [[ "$kind" == cmd ]]; then
-      active_cmd="${active_cmd:+$active_cmd|}$pat"
-    else
-      active_exp="${active_exp:+$active_exp|}$pat"
-    fi
-  done <<<"$(version_rows)"
-fi
-# The userland is the other claim, and it stands on its own: bash 5 with a BSD sed around
-# it is a macOS machine, so `POSIX tools only` turns these on whatever the floor says
-if ((posix_tools)); then
-  # A bare `mktemp -d` is fine on macOS, whose page says it "behaves as if -t tmp was
-  # supplied"; the GNU flags are not, and -t means a prefix there and a template here
-  bsd='sor[t] -[A-Za-z]*V|gre[p] -[A-Za-z]*P|readlin[k] -f|dat[e] -d|mktem[p] (-[dqu]+ )*(-[pt]|--tmpdir|--suffix)'
-  # sed -i takes a suffix on BSD and none on GNU, so neither spelling runs on both
-  bsd="$bsd"'|se[d] (-[A-Za-z]+ )*-[A-Za-z]*i|se[d] [^|;]*--in-plac[e]|gre[p] [^|;]*--exclude-di[r]'
-  bsd="$bsd"'|(^|[^-A-Za-z0-9_{$])timeou[t] [0-9]|ta[r] [^|;]*--(wildcard[s]|nul[l])'
-  active_cmd="${active_cmd:+$active_cmd|}$bsd"
-fi
-# Matched in the masked text, shown as the script has it: the line numbers are the same
-show_lines() { # show_lines < LINE NUMBERS -> `LINE has: text` from the script
-  awk 'NR == FNR { want[$1]; next } FNR in want { sub(/^[[:space:]]*/, ""); print FNR " has: " $0 }' - "$code"
+
+# What `POSIX tools only` covers, so that anything else a script calls has to be named in
+# the header beside the claim. It is what the claim promises rather than what POSIX.1
+# tabulates: a utility both a GNU and a BSD userland ship, which is the portability the
+# claim is about. `mktemp` is the case that decides between the two readings: POSIX.1-2017
+# does not list it — its utility index goes from `mkfifo` straight to `more`
+# (https://pubs.opengroup.org/onlinepubs/9699919799/idx/utilities.html) — while every
+# userland this family targets has it, and portability.md already treats it as present by
+# ruling on which of its flags differ. A name missing here is a finding
+# asking for one word in a header, which is cheap; a name wrongly here is a claim nobody
+# checks
+posix_utilities() {
+  cat <<'UTILS'
+awk basename cat chgrp chmod chown cmp comm cp cut date diff dirname du echo env expand
+expr false file find fold grep head id install join ln logname ls mkdir mkfifo mktemp more
+mv nl od paste patch pr printf ps pwd rm rmdir sed sleep sort split stty tail tar tee test
+time touch tr true tsort tty uname unexpand uniq wc who xargs
+UTILS
 }
-proxy_hits() { # proxy_hits REGEX CORPUS -> `LINE has: text` for each match outside a comment
-  [[ -n "$1" ]] || return 0
-  grep -nE "$1" "$2" | grep -vE '^[0-9]+:[[:space:]]*#' | cut -d: -f1 | show_lines || :
+
+# bash's own, which need no tool at all. `command`, `type` and `test` are here rather than
+# in the list above because a script calling them is calling the builtin
+bash_builtins() {
+  cat <<'BUILTINS'
+alias bg bind break builtin caller cd command compgen complete compopt continue declare
+dirs disown enable eval exec exit export false fc fg getopts hash help history jobs kill
+let local logout mapfile popd printf pushd pwd read readarray readonly return set shift
+shopt source suspend test times trap true type typeset ulimit umask unalias unset wait
+BUILTINS
+}
+# The rows that apply to this script: a numbered one when the floor it declares is below
+# the bash the construct needs, and a `bsd` one when it claims POSIX tools. No claim, no
+# proxy — a script that declares no floor has promised nothing about where it runs, and
+# every construct below would be a finding against a promise nobody made
+version_rows >"$work/rows.tsv"
+active_rows="$work/active.tsv"
+awk -F'\t' -v floor="$floor" -v posix="$posix_tools" '
+  $1 == "bsd" { if (posix) print; next }
+  floor && $1 + 0 > floor { print }' "$work/rows.tsv" >"$active_rows"
+# Shown as the script has it, found in the table: a row carries the line, and the line is
+# read back for the message alone
+show_lines() { # show_lines < LINE NUMBERS -> `LINE has: text` from the script
+  awk 'NR == FNR { want[$1]; next } FNR in want { sub(/^[[:space:]]*/, ""); print FNR " has: " $0 }' - "$script"
+}
+proxy_hits() { # proxy_hits -> `LINE has: text` for each active row a fact matches
+  [[ -s "$active_rows" ]] || return 0
+  # ++n and not n++: an awk variable starts as the empty string, so k[n] on the first row
+  # lands in k[""] rather than k[0], and a loop from 0 then never sees that row at all
+  awk -F'\t' '
+    NR == FNR { ++n; k[n] = $2; a[n] = $3; b[n] = $4; next }
+    { for (i = 1; i <= n; i++) if ($2 == k[i] && $6 ~ a[i] && $7 ~ b[i]) { print $1; break } }
+  ' "$active_rows" "$tree" | sort -un | show_lines || :
 }
 # A heredoc opened inside $( ), <( ) or >( ) is bash 4.0: 3.2 finds the end of the
 # substitution by scanning the heredoc's body as code, so an unpaired ' in it is a syntax
-# error and an unpaired ) ends the substitution early, and the value is quietly wrong. No
-# single line shows it — the idiom opens the substitution on the line before — so the
-# open substitutions are tracked across lines, with quotes — $'...', where \' does not
-# close the text, among them — comments, $(( )) and (( )),
-# whose << is a shift. Read in the copy with heredoc bodies blanked, where the opener
-# line stays. Backticks are left alone: 3.2 reads a heredoc inside them correctly
+# error and an unpaired ) ends the substitution early, and the value is quietly wrong.
+# One column of the table answers it: SUBST is 1 inside $( ) and <( ) and 0 inside
+# backticks and $(( )), which is exactly this rule, and the thirty-eight lines of awk that
+# tracked quotes, comments and shifts across lines to arrive at the same answer are gone
 heredoc_in_subst() { # heredoc_in_subst -> `LINE has: text` for each such opener
-  awk '
-    {
-      n = length($0)
-      for (i = 1; i <= n; i++) {
-        c = substr($0, i, 1)
-        if (q == "\047") { if (c == "\047") q = ""; continue }
-        if (q == "$") { if (c == "\\") i++; else if (c == "\047") q = ""; continue }
-        if (c == "\\") { i++; continue }
-        if (q == "\"") {
-          if (c == "\"") q = ""
-          else if (substr($0, i, 3) == "$((") { st[++d] = "a"; st[++d] = "a"; i += 2 }
-          else if (substr($0, i, 2) == "$(") { st[++d] = "sq"; q = ""; i++ }
-          continue
-        }
-        if (c == "#" && (i == 1 || substr($0, i - 1, 1) ~ /[ \t;&|()]/)) break
-        if (substr($0, i, 2) == "$\047") { q = "$"; i++; continue }
-        if (c == "\047" || c == "\"") { q = c; continue }
-        if (substr($0, i, 3) == "$((" ) { st[++d] = "a"; st[++d] = "a"; i += 2; continue }
-        if (substr($0, i, 2) == "((") { st[++d] = "a"; st[++d] = "a"; i++; continue }
-        two = substr($0, i, 2)
-        if (two == "$(" || two == "<(" || two == ">(") { st[++d] = "s"; i++; continue }
-        if (c == "(") { st[++d] = "p"; continue }
-        if (c == ")") { if (d) { if (st[d] == "sq") q = "\""; d-- } continue }
-        if (two == "<<" && substr($0, i, 3) != "<<<" && (i == 1 || substr($0, i - 1, 1) != "<") &&
-          match(substr($0, i), /^<<-?[\047"]?[A-Za-z_]/)) {
-          inside = 0
-          for (k = d; k > 0; k--) {
-            if (st[k] == "a") break
-            if (st[k] ~ /^s/) { inside = 1; break }
-          }
-          if (inside) print FNR
-          i++
-        }
-      }
-    }
-  ' "$code" | show_lines || :
+  awk -F'\t' '$2 == "heredoc" && $4 == 1 { print $1 }' "$tree" | sort -un | show_lines || :
 }
-if [[ -n "$active_cmd$active_exp" ]]; then
+if [[ -s "$active_rows" ]]; then
   claimed="bash ${claim#Needs bash }"
   [[ -n "$claim" ]] || claimed="a POSIX userland"
   while IFS= read -r hit; do
     [[ -n "$hit" ]] || continue
     finding "$name claims $claimed but $script:$hit — a proxy grep; the proof is a run under it"
   done < <({
-    proxy_hits "$active_cmd" "$code_dq"
-    proxy_hits "$active_exp" "$code_sq"
+    proxy_hits
     if ((floor && floor < 400)); then heredoc_in_subst; fi
   } | sort -n -u)
 fi
@@ -680,7 +950,11 @@ fi
 while IFS= read -r hit; do
   [[ -n "$hit" ]] || continue
   finding "$script:$hit — \${N:?} exits 1 with bash's message, where a missing argument is a usage error; guard it with ((\$# >= N)) || die"
-done < <(grep -nE '\$\{[0-9]+:[?]' "$code" | grep -vE '^[0-9]+:[[:space:]]*#' | sed 's/^\([0-9]*\):[[:space:]]*/\1 has: /' || :)
+  # A parameter expansion whose name is a number and whose operator is :?. Being an
+  # expansion is the whole question, so the tree answers it and the comment the grep had
+  # to exclude by hand is not an expansion at all
+done < <(awk -F'\t' '$2 == "param" && $6 ~ /^[0-9]+$/ && $7 == ":?" { print $1 }' "$tree" |
+  sort -un | while IFS= read -r n; do printf '%s has: %s\n' "$n" "$(sed -n "${n}s/^[[:space:]]*//p" "$script")"; done)
 
 # ---- a producer piped into a reader that stops early ------------------------------
 # `grep -q` at its match, `head` at its line, `sed q` and `awk … exit` all close the pipe
@@ -692,8 +966,119 @@ done < <(grep -nE '\$\{[0-9]+:[?]' "$code" | grep -vE '^[0-9]+:[[:space:]]*#' | 
 while IFS= read -r hit; do
   [[ -n "$hit" ]] || continue
   finding "$script:$hit — a reader that stops early kills its producer with SIGPIPE, and pipefail makes that the pipeline's status; feed it with <<< instead"
-done < <(grep -nE '[^|]\|[[:space:]]*(gre[p] -[a-zA-Z]*q|hea[d]( |$)|se[d] -n [^|]*[0-9]q|aw[k] [^|]*exi[t])' "$code" |
-  grep -vE '^[0-9]+:[[:space:]]*#' | sed 's/^\([0-9]*\):[[:space:]]*/\1 has: /' || :)
+  # One row per `|`, naming the reader on its right, so the shapes below are matched
+  # against a command and its arguments rather than against whatever the line looks like.
+  # The names no longer need splitting to keep this file from finding itself, since a
+  # string is not a pipeline
+done < <(awk -F'\t' '
+  $2 == "pipeinto" &&
+    (($6 == "grep" && $7 ~ /(^| )-[a-zA-Z]*q/) ||
+      $6 == "head" ||
+      ($6 == "sed" && $7 ~ /(^| )-n/ && $7 ~ /[0-9]q/) ||
+      ($6 == "awk" && $7 ~ /exit/)) { print $1 }' "$tree" |
+  sort -un | while IFS= read -r n; do printf '%s has: %s\n' "$n" "$(sed -n "${n}s/^[[:space:]]*//p" "$script")"; done)
+
+# ---- the dispatcher and the cmd_ functions answer to each other ---------------------
+# A subcommand whose function was renamed still dispatches, to nothing: bash reports
+# `cmd_foo: command not found` at run time and the help agrees with the arm, so every
+# check above passes. And a cmd_ function no arm calls is either a subcommand nobody can
+# reach or a leftover. Both are a question about which functions the file defines and
+# which names its arms call, and the table answers both
+#
+# It asks about calls and not about a naming convention: a dispatcher may validate the
+# word and do the work further down, which is a shape of its own and not a defect
+if [[ -n "$disp_line" ]] && ((! proxy_only)); then
+  awk -F'\t' '$2 == "func" { print $6 }' "$tree" | sort -u >"$work/defined.fn"
+  awk -F'\t' '
+    NR == FNR { if ($2 == "case" && $3 == "-" && $6 == "$cmd") d[$1] = 1; next }
+    $2 == "arm" && ($5 in d) { from = $1; to = $7 + 0; for (l = from; l <= to; l++) in_arm[l] = 1; next }
+    $2 == "call" && $6 ~ /^cmd_/ && ($1 in in_arm) { print $6 }
+  ' "$tree" "$tree" | sort -u >"$work/called.fn"
+  while IFS= read -r fn; do
+    [[ -n "$fn" ]] || continue
+    grep -qx -- "$fn" "$work/defined.fn" ||
+      finding "$name's dispatcher calls $fn(), which it does not define — bash says so only when that arm is reached"
+  done <"$work/called.fn"
+  while IFS= read -r fn; do
+    [[ -n "$fn" ]] || continue
+    grep -qx -- "$fn" "$work/called.fn" ||
+      finding "$name defines $fn() and no dispatcher arm calls it"
+  done < <(grep '^cmd_' "$work/defined.fn" || :)
+fi
+
+# ---- the tools the header claims are the tools the script calls ---------------------
+# `POSIX tools only` is a promise about what has to be installed for the script to run, and
+# it is the half of the header a macOS runner cannot prove: the bash is proven by running
+# under it, while a missing tool is only missing on the machine that lacks it. Every name
+# the script calls that is not a builtin, not one of its own functions and not a POSIX
+# utility has to appear in the header beside the claim — one word, which is what makes the
+# claim readable rather than aspirational
+if ((posix_tools && ! proxy_only)); then
+  {
+    posix_utilities
+    bash_builtins
+  } | awk '{ for (i = 1; i <= NF; i++) print $i }' | sort -u >"$work/known.tools"
+  awk -F'\t' '$2 == "func" { print $6 }' "$tree" | sort -u >>"$work/known.tools"
+  while IFS= read -r tool; do
+    [[ -n "$tool" ]] || continue
+    has_token "$tool" <<<"$header" ||
+      finding "$name calls $tool, which is neither a builtin nor a POSIX utility, and its header claims POSIX tools only without naming it"
+  done < <(awk -F'\t' '$2 == "call" && $6 ~ /^[a-z][a-z0-9_.-]*$/ { print $6 }' "$tree" |
+    sort -u | grep -vxF -f "$work/known.tools" || :)
+fi
+
+# ---- set -euo pipefail is the first thing the script does ---------------------------
+# Anything above it runs without them, and what runs there is usually the part that reads
+# the environment and decides where the script is — exactly where an unset variable or a
+# failing command matters most. The tree says which statement is first; a grep for the
+# line says only that it is somewhere. A script whose first statement is `set` with some
+# other flags is a different claim and is left alone, since shape.md rules on the spelling
+if ((! proxy_only)); then
+  first=$(awk -F'\t' '$2 == "call" && $3 == "-" { print $1 "\t" $6 "\t" $7; exit }' "$tree")
+  if [[ -n "$first" ]]; then
+    first_name=$(printf '%s' "$first" | cut -f2)
+    first_args=$(printf '%s' "$first" | cut -f3)
+    first_line=$(printf '%s' "$first" | cut -f1)
+    if [[ "$first_name" == set ]]; then
+      case "$first_args" in
+        *euo*pipefail*) ;;
+        *u*pipefail*)
+          # -e dropped: shape.md allows it where a non-zero status is the answer, and asks
+          # for a comment above the line saying which of the two shapes this file is. The
+          # comment is what makes the reason visible, since the line differs from the
+          # ordinary one by a letter, so its absence is the finding rather than the flags
+          # The whole comment block above, not the one line: a reason worth giving usually
+          # takes two lines, and then the line directly above carries the second half
+          awk -F'\t' -v l="$first_line" '
+            $2 == "comment" { c[$1] = $6 }
+            END {
+              for (n = l - 1; n in c; n--) if (c[n] ~ /-e/) { found = 1; break }
+              exit !found
+            }' "$tree" ||
+            finding "$name opens with \`set $first_args\` and the line above says nothing about the missing -e — shape.md asks for a comment naming which answer a non-zero status is"
+          ;;
+        *) finding "$name opens with \`set $first_args\` rather than \`set -euo pipefail\` — see references/shape.md" ;;
+      esac
+    else
+      finding "$name runs \`$first_name\` before \`set -euo pipefail\`, on line $(printf '%s' "$first" | cut -f1) — what happens above that line happens without -e, -u or pipefail"
+    fi
+  fi
+fi
+
+# ---- the help's heredoc keeps its delimiter quoted ---------------------------------
+# `<<EOF` expands the body, so a `$1` or a backtick in the help text is substituted on the
+# way out and the help says something the script does not. That is the price of the one
+# thing it buys, a value the script holds printed into the text — every installer in this
+# family prints `$VERSION` that way — so the finding is an unquoted delimiter whose body
+# substitutes nothing at all, which is the price paid for no purchase (help.md)
+while IFS= read -r hit; do
+  [[ -n "$hit" ]] || continue
+  finding "$name prints its help from a heredoc whose delimiter is unquoted and whose text substitutes nothing — $script:$hit; write <<'EOF' and every \$ in it stays literal"
+done < <(awk -F'\t' '
+  $2 == "func" && $6 == "usage" { from = $1; to = $7 + 0; next }
+  from && $2 == "heredoc" && $1 >= from && $1 <= to && $6 !~ /^'"'"'/ { hd[$1] = 1 }
+  from && $2 == "heredocexp" && $1 >= from && $1 <= to { subst_in[$1] = 1 }
+  END { for (l in hd) if (!(l in subst_in)) print l }' "$tree")
 
 # ---- the header comment lists nothing ---------------------------------------------
 # It says why the script exists and makes the claims; what the script accepts is the
@@ -717,6 +1102,19 @@ if ! parse=$("$BASH" -n "$script" 2>&1); then
   proxy_only=1
 fi
 
+# Built once and printed by whichever exit is reached: an exit code does not say what was
+# examined, and a run that examined nothing exits 0 too, so every run states its verdict
+# and names what it did not do
+summary=$(printf '%s — %d subcommands, %d flags agree with the help; %d document(s), %s completions checked' \
+  "$name" "${#subs[@]}" "${#flags[@]}" "$((${#docs[@]} + ${#mentions[@]}))" \
+  "$([[ -n "$comp_bash" ]] && echo 2 || echo 0)")
+((bash_only == 0)) || summary="$summary; --bash-only, so nothing that reads the script as a tree ran"
+
+# Everything from here on holds the help, a document or a completion to the subcommands
+# and flags read out of the code. Under --bash-only those lists are empty because no tree
+# was read, not because the script has none, so every row the help carries would be read
+# as a flag no parser accepts: comparing against nothing finds everything wrong, the same
+# way it finds nothing wrong
 # ---- the help ---------------------------------------------------------------------
 if ((! proxy_only)); then
   # Run under the bash running this checker, not the one the shebang finds: on a macOS
@@ -732,13 +1130,32 @@ if ((! proxy_only)); then
   # record, so no grep can decide the question, and the pipe can. A whole single-quoted
   # word is skipped as one, since an awk program holds the `;` and `$` that end a match
   if piped=$("$BASH" <(cat "$script") --help 2>&1) && [[ "$piped" != "$help" ]]; then
-    self_read='(sed|awk|head|tail|cat|grep|cut)[[:space:]]([^|;&$'"'"']|'"'"'[^'"'"']*'"'"')*"\$\{BASH_SOURC[E](\[0\])?\}"'
-    # `sed -n 1s…p` rather than `| head -n 1 |`: head stops reading at its line and the
-    # grep before it dies of SIGPIPE, which pipefail makes the status — swallowed by the
-    # `|| :` here, leaving the line number silently missing from the finding
-    where=$(grep -nE "$self_read" "$code" | grep -vE '^[0-9]+:[[:space:]]*#' | sed -n '1s/^\([0-9]*\):[[:space:]]*/ — line \1 has: /p' || :)
+    # Which line to name, best effort: a call to a reader whose arguments hold BASH_SOURCE.
+    # The tree decides that it is a call and which words are its arguments — a comment and
+    # a quoted awk program are neither — and the line itself is read only for the message.
+    # `$` in B means a word that expands, which is what "${BASH_SOURCE[0]}" is, so the text
+    # of that line is where the name can be looked for and nowhere else
+    where=$(awk -F'\t' '
+      $2 == "call" && $6 ~ /^(sed|awk|head|tail|cat|grep|cut)$/ && $7 ~ /(^| )\$( |$)/ { print $1 }' "$tree" |
+      sort -un | while IFS= read -r n; do
+      grep -q 'BASH_SOURCE' <<<"$(sed -n "${n}p" "$script")" || continue
+      printf ' — line %s has: %s\n' "$n" "$(sed -n "${n}s/^[[:space:]]*//p" "$script")"
+      break
+    done)
     finding "$name --help prints other text through a pipe than from the file, at exit 0: under bash <(…) it reads its own source${where:-, by a path no grep here can name}; print the help from a heredoc"
   fi
+  # The two runs above are the last thing --bash-only does: they ask this bash a question
+  # and answer it. Everything past here holds the help, a document or a completion to the
+  # subcommands and flags read out of the code, and in this mode those lists are empty
+  # because no tree was read rather than because the script has none — so every row the
+  # help carries would be read as a flag no parser accepts. Comparing against nothing
+  # finds everything wrong, the same way it finds nothing wrong
+  if ((bash_only)); then
+    ((findings == 0)) || exit 1
+    printf 'check-sh: %s\n' "$summary"
+    exit 0
+  fi
+
   # Per-subcommand help, where the script has it: `help SUB` for each help_<sub>() it
   # defines. Its flags are then looked for there rather than in the general help
   corpus="$help"
@@ -792,7 +1209,12 @@ if ((! proxy_only)); then
       [[ -n "$var" ]] || continue
       variables=$((variables + 1))
       has_token "$var" <<<"$corpus" || finding "$name reads $var but its help never mentions it"
-    done < <(grep -oE "(^|[^A-Za-z0-9_])${prefix}[A-Z0-9_]+" "$script" | sed 's/^[^A-Za-z0-9_]//' | sort -u)
+      # A parameter expansion is where a variable is read. The grep this replaces ran over
+      # the raw file, so a name written in a comment or inside the help's own heredoc
+      # counted as a use, and a help could satisfy the check by mentioning a variable the
+      # script never reads
+    done < <(awk -F'\t' -v p="$prefix" '
+      $2 == "param" && index($6, p) == 1 && $6 ~ /^[A-Z0-9_]+$/ { print $6 }' "$tree" | sort -u)
     ((variables > 0)) || finding "$name reads no $prefix variable at all — the prefix is wrong, or the extractor is"
   fi
 
@@ -807,8 +1229,19 @@ if ((! proxy_only)); then
     [[ -n "$n" ]] || continue
     grep -qx -- "$n" <<<"$codes_listed" ||
       finding "$name exits $n but its help never lists $n on an Exit line"
-  done < <(grep -vE '^[[:space:]]*#' "$code" |
-    grep -oE '(^|[;{(&|[:space:]])exit [1-9][0-9]*[[:space:]]*(;|&&|\|\||$)' | grep -oE '[0-9]+' | sort -u)
+    # A call to exit with one literal argument. Being a call is what the three greps this
+    # replaces were spelling out by hand — outside a comment, ending its statement, not
+    # inside a quoted awk program — and the tree answers all three by construction
+  done < <(awk -F'\t' '$2 == "call" && $6 == "exit" && $7 ~ /^[1-9][0-9]*$/ { print $7 }' "$tree" | sort -u)
+fi
+
+# The same stop as inside the help section, for the path that skipped it: a script the
+# proxy alone is checked by never reaches the exit there, and the documents below would
+# still be held to an empty list
+if ((bash_only)); then
+  ((findings == 0)) || exit 1
+  printf 'check-sh: %s\n' "$summary"
+  exit 0
 fi
 
 # ---- the documents ----------------------------------------------------------------
@@ -859,7 +1292,21 @@ if [[ -n "$comp_bash" ]]; then
   # A file that is only ever sourced has no shebang, so its first line names the dialect
   [[ "$(head -n 1 "$comp_bash")" == "# shellcheck shell=bash" ]] ||
     finding "$comp_bash does not open with \`# shellcheck shell=bash\`, the dialect line a sourced file needs"
-  offered_words "$comp_bash" 0 >"$work/offered.bash"
+  # The bash half is read as a tree: the words it offers live in assignments and in the
+  # arguments of the calls that build the reply, and a case arm's pattern — `run)`, `-l)` —
+  # is a pattern and not an offered word, which the tree says by putting it somewhere else.
+  # The awk being replaced had to strip those arms by regular expression first
+  #
+  # The zsh half keeps that awk on purpose: an `_arguments` spec is a grammar of its own
+  # living inside string literals, so a parse of the shell around it says nothing about
+  # what the spec offers, and shfmt would hand back the string whole
+  if read_tree "$comp_bash" >"$work/comp.tsv" 2>/dev/null; then
+    awk -F'\t' '$2 == "assign" || $2 == "call" { print $6; print $7 }' "$work/comp.tsv" |
+      tr ' ' '\n' | sed '/^-$/d;/^$/d' >"$work/offered.bash"
+  else
+    finding "$comp_bash cannot be read as a tree, so the words it offers cannot be checked"
+    : >"$work/offered.bash"
+  fi
   offered_words "$comp_zsh" 1 >"$work/offered.zsh"
   for f in "$comp_bash" "$comp_zsh"; do
     words="$work/offered.bash"
@@ -891,6 +1338,15 @@ fi
 # thorough while testing one thing. A nested run skips this section.
 
 if [[ -n "${CHECK_SH_NESTED:-}" ]]; then
+  printf 'check-sh: %s; self-test skipped\n' "$summary"
+  exit 0
+fi
+
+# Under --bash-only the checks that read a tree did not run, so most of what the plants
+# below falsify was never asked. A falsification pass that cannot fail proves nothing and
+# would read as though it had, so it is skipped whole and said out loud
+if ((bash_only)); then
+  printf 'check-sh: %s; self-test skipped, since it falsifies checks this mode does not run\n' "$summary"
   exit 0
 fi
 
@@ -915,7 +1371,11 @@ EOF
 nested() { # nested DIR [ARGS...] -> this script on DIR's copy, falsification skipped
   local d="$1"
   shift
-  CHECK_SH_NESTED=1 "$BASH" "$self" "$@"
+  # The mode travels into every nested run: under --bash-only the tools are absent, and a
+  # nested call that asked for the tree would refuse and read as the checker being broken
+  local mode=()
+  ((bash_only == 0)) || mode=(--bash-only)
+  CHECK_SH_NESTED=1 "$BASH" "$self" ${mode[@]+"${mode[@]}"} "$@"
 }
 copy() { # copy NAME -> a fresh copy of the canon
   local c="$work/$1"
@@ -972,6 +1432,42 @@ c=$(copy faithful)
 # shellcheck disable=SC2046 # full() prints the arguments, split on purpose
 expect_green "$c" "the canonical script" $(full "$c")
 
+# The two below put the defect in the tools rather than in the text, which is the one
+# thing a planted line cannot express: a copy that quietly lost shfmt must refuse, and
+# --bash-only must be the only way past it. A PATH with the tool removed is how that is
+# asked, since a machine cannot be asked to forget it
+#
+# Both are about the preflight, which --bash-only turns off, so a run already in that mode
+# skips them: there is no tree-reading path for a missing tool to stop, and nested() would
+# hand the plant the very flag it exists to do without. The summary says that half of the
+# run did not happen, which is where a reader learns these did not either
+if ((bash_only == 0)); then
+  no_tree_path=""
+  # shellcheck disable=SC2086 # splitting PATH on : is the point
+  oldifs=$IFS
+  IFS=:
+  for p in $PATH; do
+    [ -x "$p/shfmt" ] || no_tree_path="${no_tree_path:+$no_tree_path:}$p"
+  done
+  IFS=$oldifs
+
+  c=$(copy no-shfmt)
+  status=0
+  out=$(PATH="$no_tree_path" nested "$c" "$c/script.sh" 2>&1) || status=$?
+  ((status == 2)) || die "self-test: a run that cannot read a tree was not refused (got $status): $out"
+  case "$out" in *"to read SCRIPT as a tree"*) ;; *) die "self-test: a run without shfmt was refused for the wrong reason: $out" ;; esac
+  planted=$((planted + 1))
+
+  c=$(copy bash-only)
+  status=0
+  out=$(PATH="$no_tree_path" nested "$c" --bash-only "$c/script.sh" 2>&1) || status=$?
+  ((status == 0)) || die "self-test: --bash-only did not pass on a machine without shfmt (got $status): $out"
+  case "$out" in
+    *"nothing that reads the script as a tree ran"*) ;;
+    *) die "self-test: --bash-only passed without saying the tree half was skipped: $out" ;;
+  esac
+fi
+
 c=$(copy nothing)
 printf '#!/usr/bin/env bash\necho hi\n' >"$c/script.sh"
 status=0
@@ -985,7 +1481,7 @@ c=$(copy plain-claimed)
 # by the proxy alone: clean it passes, with a bash 4 construct it goes red
 printf '#!/usr/bin/env bash\n# Needs bash 3.2 and POSIX tools only.\necho hi\n' >"$c/plain.sh"
 nested "$c" "$c/plain.sh" >/dev/null 2>&1 || die "self-test: a plain script claiming bash 3.2 was refused rather than checked by the proxy"
-printf 'false && declar''e -A m\n' >>"$c/plain.sh"
+printf 'false && declare -A m\n' >>"$c/plain.sh"
 expect_red "$c" "claims bash 3.2 but $c/plain.sh:" "a bash 4 construct in a plain script claiming 3.2" "$c/plain.sh"
 
 c=$(copy helper-case)
@@ -1192,13 +1688,13 @@ expect_green "$c" "a copy holding <<WORD inside quotes" $(full "$c")
 c=$(copy literal-bash4)
 # A bash 4 construct inside single quotes is text, which a 3.2 parses happily: the proxy
 # reads what a script would run, and a single-quoted string runs nothing
-plant "$c" 'HERE=' "note='declar""e -A is bash 4'"
+plant "$c" 'HERE=' "note='declare -A is bash 4'"
 expect_green "$c" "a copy naming a bash 4 construct inside single quotes" -n script.sh "$c/script.sh"
 
 c=$(copy literal-bash4-double)
 # The same inside double quotes, which is where a message says it: a gate proving a bash
 # is 3.2 has to print the construct's name, and the proxy read that sentence as a use
-plant "$c" 'HERE=' "note=\"this bash accepts declar""e -A\""
+plant "$c" 'HERE=' "note=\"this bash accepts declare -A\""
 expect_green "$c" "a copy naming a bash 4 construct inside double quotes" -n script.sh "$c/script.sh"
 
 c=$(copy claimed-bash4)
@@ -1242,7 +1738,7 @@ expect_red "$c" "has: while read -r l; do :; done < <(cat <<X" "a heredoc inside
 c=$(copy heredoc-beside-subst)
 # What reads like one and is not: a shift inside $(( )), a here-string, a ( inside a
 # string inside $( ), a heredoc once the substitution has closed, and one in backticks
-plant "$c" 'HERE=' "n=\$(echo \$((1<<k)))
+plant "$c" 'HERE=' "n=\$(k=2; echo \$((1<<k)))
 x=\$(tr a b <<<word)
 y=\"\$(echo \"(\")\"; cat <<X >/dev/null
 b
@@ -1260,15 +1756,66 @@ printf 'if then\n' >>"$c/script.sh"
 expect_red "$c" "does not parse under the bash running this checker" "a script with a syntax error" -n script.sh "$c/script.sh"
 
 c=$(copy early-reader)
-# A text piped into a reader that stops early: the spelling is split so this file's own
-# check does not match the line that plants it
-plant "$c" 'HERE=' 'printf "%s\n" here | gre''p -q x || :'
+plant "$c" 'HERE=' 'printf "%s\n" here | grep -q x || :'
 expect_red "$c" "a reader that stops early kills its producer" "a text piped into grep -q" -n script.sh "$c/script.sh"
 
 c=$(copy claimed-gnu-mktemp)
 # shellcheck disable=SC2016 # the substitution belongs to the script being written out
-plant "$c" 'HERE=' 'x=$(mktem'"p -d -p /tmp)"
-expect_red "$c" "has: x=\$(mktem""p -d -p /tmp)" "a GNU mktemp flag under a 3.2 claim" -n script.sh "$c/script.sh"
+plant "$c" 'HERE=' 'x=$(mktemp -d -p /tmp)'
+expect_red "$c" "has: x=\$(mktemp -d -p /tmp)" "a GNU mktemp flag under a 3.2 claim" -n script.sh "$c/script.sh"
 
-printf 'check-sh: %s — %d subcommands, %d flags agree with the help; %d document(s), %s completions checked; %d planted defects caught\n' \
-  "$name" "${#subs[@]}" "${#flags[@]}" "$((${#docs[@]} + ${#mentions[@]}))" "$([[ -n "$comp_bash" ]] && echo 2 || echo 0)" "$planted"
+c=$(copy unnamed-tool)
+# A tool that is neither a builtin nor a POSIX utility, called by a script whose header
+# promises POSIX tools only and does not name it
+plant "$c" 'HERE=' 'planted_never_called() { ripgrep --version; }'
+expect_red "$c" "calls ripgrep, which is neither a builtin nor a POSIX utility" "a non-POSIX tool the header does not name" -n script.sh "$c/script.sh"
+
+c=$(copy named-tool)
+# And the same call with the header naming it, which is the whole fix the finding asks for
+plant "$c" 'HERE=' 'planted_never_called() { ripgrep --version; }'
+swap "$c" '# Needs bash 3.2 and POSIX tools only' '# Needs bash 3.2, ripgrep and POSIX tools only'
+expect_green "$c" "a non-POSIX tool named in the header" -n script.sh "$c/script.sh"
+
+c=$(copy code-before-set)
+# A line above `set -euo pipefail` runs without any of the three, and this is where a
+# script reads its environment
+plant "$c" '#!/usr/bin/env bash' 'umask 022'
+expect_red "$c" "before \`set -euo pipefail\`" "a command run before the shell options are set" -n script.sh "$c/script.sh"
+
+c=$(copy dropped-e-unexplained)
+# -e dropped with nothing above saying why: the line differs from the ordinary one by a
+# letter, so the comment is the only thing that makes the reason visible
+swap "$c" 'set -euo pipefail' 'set -uo pipefail'
+expect_red "$c" "says nothing about the missing -e" "a dropped -e with no comment" -n script.sh "$c/script.sh"
+
+c=$(copy dispatch-renamed-fn)
+# The function is renamed and the arm is not: the help still agrees with the dispatcher,
+# and bash says `cmd_run: command not found` only when someone runs that subcommand
+swap "$c" 'cmd_run() {' 'cmd_execute() {'
+expect_red "$c" "calls cmd_run(), which it does not define" "an arm calling a function that was renamed" -n script.sh "$c/script.sh"
+
+c=$(copy orphan-cmd-fn)
+# And the other direction: a cmd_ function nothing dispatches to
+plant "$c" 'cmd_run() {' '  :'
+plant "$c" 'HERE=' 'cmd_orphan() { :; }'
+expect_red "$c" "defines cmd_orphan() and no dispatcher arm calls it" "a cmd_ function with no arm" -n script.sh "$c/script.sh"
+
+c=$(copy help-heredoc-unquoted)
+# A help with nothing to substitute, printed from a heredoc that would substitute: the
+# price of auditing every $ in the text, paid for no purchase. The canonical help names
+# $SCRIPT_LOGDIR, which is the deliberate form and not a finding, so the text goes too
+replace_usage "$c" 'usage() { cat <<EOF
+script.sh — one sentence
+
+  script.sh [-n] run
+  script.sh stop
+
+  -n, --dry-run   say what would be done
+  -l DIR          the log directory
+
+Exit 0 done, 2 on a usage error
+EOF
+}'
+expect_red "$c" "delimiter is unquoted" "a help printed from a heredoc that expands it" -n script.sh "$c/script.sh"
+
+printf 'check-sh: %s; %d planted defects caught\n' "$summary" "$planted"

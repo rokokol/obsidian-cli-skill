@@ -2,13 +2,13 @@
 # vendor-sync.sh, one per line: LOCAL OWNER/REPO PATH COMMIT BLOB [manual]. Never edit a
 # copy in place: change it at its source and let the weekly cascade bring it back. How it
 # works: references/bump-cascade.md in https://github.com/rokokol/ci-skill
-vendor-sync.sh rokokol/ci-skill templates/vendor-sync.sh 9760709ce4a6879d53029d7ca984d2af64516c38 722bf9770b87fb850c91d845475a5bb64640fb3c
-check-pins.sh rokokol/ci-skill templates/check-pins.sh 65a870043a54563fe72302de56b9d06ce932adbd f44a172369006a0aae79f4a4f0f1d6e6afde2203
-check-changelog.sh rokokol/versioning-skill check-changelog.sh 8cae74bb044d42acc2034bfa307ee92101f3273d 7e66f60e725546cf28414f93b15230567e511c6e
+vendor-sync.sh rokokol/ci-skill templates/vendor-sync.sh 1e036e65e3284369fdec3607f423edd4d006b7fc 176a58470c142a98cb6434a889b3e98fea266ad3
+check-pins.sh rokokol/ci-skill templates/check-pins.sh 1e036e65e3284369fdec3607f423edd4d006b7fc c86f8288606d532f7982206eea8e8a310315d7f6
+check-changelog.sh rokokol/versioning-skill check-changelog.sh b71f768bef8e6557a65dda8c6444fc92ed4e8e55 103e3395a394fe6d39b8d7e0989107d9aa01c2e8
 .github/workflows/vendor-sync.yml rokokol/ci-skill templates/github/workflows/vendor-sync-macos.yml 1e036e65e3284369fdec3607f423edd4d006b7fc f7bb30b8eb3483cb13276df5237b37afc888c002 manual
-check-sh.sh rokokol/bash-best-practices-skill check-sh.sh 13514008781f8a5bee15be69c92495e00f1c31f6 24e11239bd25f48ff7b442ee211385764f0de1bb
-check-interface.sh rokokol/ci-skill templates/check-interface.sh 9760709ce4a6879d53029d7ca984d2af64516c38 237f411688b83a52082e4dd900a65ad582896a39
-check-skill.sh rokokol/skill-authoring-skill check-skill.sh 4c594998190f36785b290a4013acf0cb53d7fc4a 70e838cfb4ad0c68250811c98230c085ce4853fc
-tests/t.sh rokokol/tests-skill t.sh 0df843a043cc9661eb37dceebcf66fbd15a727ab 462d2b06942686967b4806b84b54277d1dc0d2b6
+check-sh.sh rokokol/bash-best-practices-skill check-sh.sh d625a2d6d0472065c2e18377d4cefccf6141b082 f5cd917187c62224538ae8efdeb708f806be90f6
+check-interface.sh rokokol/ci-skill templates/check-interface.sh 1e036e65e3284369fdec3607f423edd4d006b7fc abf757fe6a1a30ccd0669bb3f54a17d38a84da87
+check-skill.sh rokokol/skill-authoring-skill check-skill.sh b779d5c14e157337f432f2a23cdc4b52c9aed806 1e9b3cbe3e5733237de315943ceb72efd63375c6
+tests/t.sh rokokol/tests-skill t.sh 1bade873fdfbadbd87bd05da13e954035924f22c 5f1f9f634b9d9c689592ec95a196c4734189eb14
 tests/markers/ rokokol/tests-skill markers/ eb9376c3789e31d0fbada2c1f3480dc740b72371 65d141bbf07ecb99a3bd6ebfe4e0d3050a2c1ab4
 check-prose.sh rokokol/create-readme-skill check-prose.sh 66820c8be3477c218dabdfcbb5e41e085de40e57 3054ffa2de0990be2164494d734f34f17eda5e2b

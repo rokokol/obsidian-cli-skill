@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Never edits its copy in place: a fix belongs in rokokol/versioning-skill. Needs bash 3.2
-# and POSIX tools only
+# Taken from rokokol/versioning-skill through the ci skill's vendoring cascade
+# (references/bump-cascade.md in https://github.com/rokokol/ci-skill): a copy is never
+# edited in place, a fix belongs there. Needs bash 3.2 and POSIX tools only
+# No -e: every finding is printed and counted, and a non-zero grep is data, not a failure
 set -uo pipefail
 
 usage() {
   cat <<'EOF'
 Decide the machine-checkable half of a changelog. Takes ANY changelog, so it is worth
 more than a review comment: drop it into a repository's own gate and the rules stop
-depending on somebody remembering them. Another repository takes it through the ci
-skill's vendoring cascade (references/bump-cascade.md in https://github.com/rokokol/ci-skill)
+depending on somebody remembering them
 
   check-changelog.sh [-v VERSION-FILE | -n] [-t TEMPLATE] [CHANGELOG]
 
@@ -65,7 +66,7 @@ a repository stopped shipping versions, numbered above dated where it started, i
 history kept rather than rewritten. A VERSION file puts the numbered ones on top, and -n
 the dated ones
 
-Nothing here reaches the network.
+Nothing here reaches the network
 Exit: 0 clean, 1 findings printed, 2 a usage error
 EOF
 }
@@ -149,8 +150,9 @@ version_lt() { # version_lt A B -> 0 when A < B
   for i in 0 1 2; do
     x=${ia[$i]:-0}
     y=${ib[$i]:-0}
-    ((10#$x < 10#$y)) && return 0
-    ((10#$x > 10#$y)) && return 1
+    # The braces are what tree-sitter needs: it rejects a base prefix before a bare $name
+    ((10#${x} < 10#${y})) && return 0
+    ((10#${x} > 10#${y})) && return 1
   done
   # Equal cores: a release outranks every prerelease of itself. A's side is asked first —
   # asked the other way round, B being a release answered "not less" even when A was that
@@ -165,8 +167,8 @@ version_lt() { # version_lt A B -> 0 when A < B
     x=${ia[$i]}
     y=${ib[$i]}
     if [[ "$x" =~ ^[0-9]+$ && "$y" =~ ^[0-9]+$ ]]; then
-      ((10#$x < 10#$y)) && return 0
-      ((10#$x > 10#$y)) && return 1
+      ((10#${x} < 10#${y})) && return 0
+      ((10#${x} > 10#${y})) && return 1
     elif [[ "$x" =~ ^[0-9]+$ ]]; then
       return 0
     elif [[ "$y" =~ ^[0-9]+$ ]]; then
@@ -209,7 +211,7 @@ long_day() { # long_day "July 20th, 2026" -> iso=2026-07-20
     n=$((n + 1))
     [[ "${name:0:3}" == "${month:0:3}" ]] && break
   done
-  printf -v iso '%04d-%02d-%02d' "$((10#$year))" "$n" "$((10#$day))"
+  printf -v iso '%04d-%02d-%02d' "$((10#${year}))" "$n" "$((10#${day}))"
 }
 
 # Each placeholder's pattern, with the number of groups it opens, since ERE has no
@@ -254,11 +256,14 @@ t_body=() t_re=() t_gv=() t_gd=() t_gl=()
 while IFS= read -r body; do
   compile "$body"
   t_body+=("$body") t_re+=("$re") t_gv+=("$g_version") t_gd+=("$g_date") t_gl+=("$g_long")
-done < <(usage | awk '
+  # <<< and not `usage | awk`: the program exits once the table is read, and a producer
+  # whose reader stops early dies of SIGPIPE, which pipefail makes the status of a
+  # pipeline that did its job
+done < <(awk '
   /^Templates, and who writes them:$/ { f = 1; next }
   f && /^$/ { if (seen) exit; next }
   f { seen = 1; sub(/^  /, ""); split($0, cell, /  +/); print cell[1] }
-')
+' <<<"$(usage)")
 ((${#t_body[@]} > 0)) || die "no templates in the help — the table under 'Templates, and who writes them:' is gone"
 
 # Which template of the table a heading follows, numbered rows only or dated rows only: its

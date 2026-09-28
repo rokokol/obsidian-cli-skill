@@ -59,7 +59,7 @@ The findings, by the id each one carries:
   stale-allow      an entry in the -x file that excuses nothing, one naming a document
                    this run does not read included, so the file stays true
 
-Nothing here reaches the network.
+Nothing here reaches the network
 Exit 0 when every claim holds, 1 with one `check-interface: FILE:LINE: ID: what` line
 per finding, 2 on a usage error, an unreadable file, an -x entry that is not
 `ID PATH [TEXT]` or names an id no excusable finding carries, a declared list that names
