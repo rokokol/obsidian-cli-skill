@@ -212,6 +212,54 @@ Every alias maps to an array of paths, so a collision is an entry with more than
 
 YAML reads `- 34984` as a number, and Obsidian keeps only the string items of `aliases` — so that alias is not one, in the app or anywhere else. Measured on a live vault with exactly that entry: the index holds `34984` as a number, and the app's own `aliases` command lists no numeric alias at all. A link `[[34984]]` then resolves to nothing. Quote it — `- "34984"` — and quote any alias YAML would otherwise read as something other than text
 
+## Renaming and moving
+
+### A dot in the new name is read as its extension
+
+`rename name=` and `move to=` add `.md` only to a name that has no dot. With a dot, the text after the last dot becomes the extension, so a numbered note stops being a note:
+
+```console
+$ obsidian-cli rename path="Notes/top.md" name="renamed"
+Renamed: Notes/top.md -> Notes/renamed.md
+$ obsidian-cli rename path="Notes/renamed.md" name="01. Intro"
+Renamed: Notes/renamed.md -> Notes/01. Intro
+$ obsidian-cli eval code='(()=>{const f=app.vault.getAbstractFileByPath("Notes/01. Intro");return JSON.stringify({ext:f.extension,md:app.vault.getMarkdownFiles().includes(f)})})()'
+=> {"ext":" intro","md":false}
+```
+
+The file drops out of the markdown index, so links, tags and properties no longer see it. `move to="Notes/02. Moved"` did the same. Always pass the name with its extension: `rename path="Notes/01. Intro" name="01. Intro.md"` puts the note back
+
+### A folder is renamed only through `eval`
+
+`rename` and `move` refuse a folder with `Error: "Notes/A" is a folder, not a file.` The app's `fileManager.renameFile` renames one, and the next entry applies to it:
+
+```bash
+obsidian-cli eval code='(async()=>{await app.fileManager.renameFile(app.vault.getAbstractFileByPath("Notes/A"),"Notes/B");return "ok"})()'
+```
+
+### A renamed folder leaves its subfolders unwatched
+
+The app watches each folder of the vault separately, in `app.vault.adapter.watchers`, keyed by path. After `fileManager.renameFile` on a folder, only that folder gets a watcher under its new path. Each folder below it keeps a watcher under its old path, and no watcher has the new one:
+
+```console
+$ obsidian-cli eval code='JSON.stringify(Object.keys(app.vault.adapter.watchers).filter(k=>k.startsWith("Notes")))'
+=> ["Notes","Notes/A","Notes/A/sub"]
+$ obsidian-cli eval code='(async()=>{await app.fileManager.renameFile(app.vault.getAbstractFileByPath("Notes/A"),"Notes/B");return "ok"})()'
+=> ok
+$ obsidian-cli eval code='JSON.stringify(Object.keys(app.vault.adapter.watchers).filter(k=>k.startsWith("Notes")))'
+=> ["Notes","Notes/A/sub","Notes/B"]
+```
+
+A file written from outside the app then reaches the index in the renamed folder and not below it. With `Notes/B/top2.md` and `Notes/B/sub/two.md` written by the shell and read back 8 s later, `top2.md` was in the vault and `two.md` was not. `getFirstLinkpathDest("two","")` returned `null`, so a link or an embed of it resolves to nothing. The same held two levels down and for a folder made by `mkdir` inside the renamed one. The files that were in the subfolders before the rename stayed in the index
+
+Repair the watchers right after the rename, with the renamed folder as `root`. The code stops each watcher whose path no longer exists, starts one on every folder under `root`, and gives `reconcileFile` each entry on disk that the index lacks, since a file written while nothing watched is never reported again:
+
+```bash
+obsidian-cli eval code='(async()=>{const a=app.vault.adapter,root="Notes/B";for(const k of Object.keys(a.watchers))if(!(await a.exists(k)))a.stopWatchPath(k);const walk=async d=>{await a.startWatchPath(d);const l=await a.list(d);for(const p of l.folders.concat(l.files))if(!a.files[p])await a.reconcileFile(p,p);for(const s of l.folders)await walk(s)};await walk(root);return "ok"})()'
+```
+
+After it, the missed files and the folder made by `mkdir` were in the index, the watchers matched the folders on disk, and a file written next by the shell arrived within 1.5 s
+
 ## Flags and commands that do nothing
 
 - **`all` on `orphans` and `deadends` changes nothing.** Non-markdown files are counted with or without it; output is byte-identical. The official documentation does not list the flag at all, which fits
@@ -242,3 +290,21 @@ On a packaged install the in-app registration can fail with `Unable to add to co
 ### Client and app versions drift apart
 
 `version` reports both: `1.13.7 (installer 1.13.4)`. The app updates itself through a downloaded `.asar` while the packaged client stays at the version the package pinned. That pairing worked for everything documented here, but the socket protocol is between the two — when something behaves unlike this document, compare both numbers first
+
+## A call that never returns
+
+### A frozen app stalls every call, `version` included
+
+The CLI has no timeout of its own: it waits for the app as long as the app takes. A busy app makes every call wait, the cheapest one too. A 3 s busy loop sent through `eval` blocked the app, and `version`, sent 0.5 s into it, answered only when the loop ended:
+
+```bash
+obsidian-cli eval code='(()=>{const t=Date.now();while(Date.now()-t<3000);return "done"})()' >/dev/null &
+sleep 0.5; timeout 10 obsidian-cli version    # answered after 2498 ms, against 4 ms with the app idle
+```
+
+A promise that never settles inside `eval` is different: it holds only its own call. `timeout 8 obsidian-cli eval code='new Promise(()=>{})'` was still waiting when `timeout` ended it with exit 124, and `version` answered in 6 ms meanwhile
+
+So put `timeout` on each call, and when one runs out, ask the app with `timeout 5 <cli> version`:
+
+- **`version` answers.** The app is alive, and the call waits on its own code. Fix the code, and do not restart the app
+- **`version` runs out too.** The app is frozen, and no CLI call reaches it. Restart it from outside the CLI: close its window or end its process, then start it again the way it is normally started. Poll `version` until it answers, then send one call and ignore its answer, as [the first call to a vault left alone](#the-first-call-to-a-vault-left-alone-answers-that-the-command-does-not-exist) requires. The restart closes the vault for the user and for every other session that uses it, so tell them before it

@@ -24,6 +24,7 @@ These cost one line each and are the difference between a real answer and a plau
 2. **Always pass a target.** Unknown parameters and flags are ignored in silence, so one typo turns a targeted query into a query about whichever file is open in the GUI: `backlinks fil=Garden total` answered `5` where `file=` answers `12`. Nothing warns. Prefer `path=` (exact, from the vault root) over `file=` (wikilink-style name resolution) whenever the path is known
 3. **Bound every listing.** These commands stream the whole vault. `search:context` for a common word returned **98 MB** in one call here. Put `limit=` on searches and `total` on counts. When a command has no native bound, capture its output, reject an `Error: ` line, and only then inspect a bounded part; a truncating pipeline can hide the call's result
 4. **Close stdin on every call in a loop.** The CLI reads stdin, so `while IFS= read -r f; do <cli> links path="$f"; done < list` consumes the list on its first call and ends after one file, silently and 500 times too fast. Add `</dev/null` to the inner call
+5. **Put a `timeout` on every call.** The CLI waits as long as the app takes. When a call runs out, `timeout 5 <cli> version` tells the two causes apart: if it answers, the call's own `eval` code never settles; if it runs out too, the app is frozen and needs a restart from outside the CLI. Signs and procedure — [`references/pitfalls.md`](references/pitfalls.md#a-frozen-app-stalls-every-call-version-included)
 
 ## Task to command
 
@@ -77,6 +78,8 @@ Write through the app — a CLI command, or `vault.modify` under `eval` — when
   ```
 
 - **Renaming and moving are writes to every note that links to the one being renamed.** `rename` and `move` have the app do it, and it rewrites each incoming `[[link]]` to the new name; a filesystem `mv` reaches none of them and leaves the whole vault pointing at a name that no longer exists
+- **Give `rename name=` and `move to=` the extension.** They add `.md` only to a name without a dot, so `name="01. Intro"` makes a file with the extension ` intro`, and it drops out of the note index
+- **A renamed folder leaves its subfolders unwatched.** `rename` and `move` refuse folders, and after `app.fileManager.renameFile` under `eval`, files written into its subfolders from outside the app never reach the index. Repair the watchers right after the rename — the code is in [`references/pitfalls.md`](references/pitfalls.md#a-renamed-folder-leaves-its-subfolders-unwatched)
 - **Indexing is asynchronous.** A graph query fired immediately after a write can answer from the previous state — 9 of 20 immediate reads did here, 0 of 20 after 0.3 s. Re-read before reporting success rather than trusting the write
 
 ## Reference

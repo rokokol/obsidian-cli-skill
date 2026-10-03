@@ -2,6 +2,13 @@
 
 Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dated rather than numbered, and with no `Unreleased` section — this repository is read at whatever revision you have checked out, so whatever is on the default branch is what every reader already has
 
+## 2026-10-03
+
+### Added
+
+- `references/pitfalls.md`, "Renaming and moving": `rename name=` and `move to=` read a dot in the new name as the start of an extension, `rename` and `move` refuse folders, and a folder renamed through `app.fileManager.renameFile` leaves its subfolders unwatched, with the `eval` code that repairs the watchers. `SKILL.md` names them under Writing
+- `references/pitfalls.md`, "A call that never returns": a frozen app stalls every CLI call, `version` included, while an `eval` promise that never settles holds only its own call. `SKILL.md` gains a rule to put a `timeout` on every call, tell the two causes apart with `timeout 5 <cli> version`, and restart a frozen app from outside the CLI
+
 ## 2026-09-18
 
 ### Added
