@@ -6,7 +6,7 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 
 ### Added
 
-- `references/pitfalls.md`, "Frontmatter": `processFrontMatter` writes a key the note did not have after every existing key, and quotes a string only where YAML would read it as another type, so `П2` and a date go bare. The entry gives the measured output and the way to rebuild the key order inside the callback. `SKILL.md` names it under Writing
+- `references/pitfalls.md`, "Frontmatter": `processFrontMatter` writes a key the note did not have after every existing key. The entry gives the measured output and the way to rebuild the key order inside the callback, and notes that its quoting is correct YAML: a string is quoted only where YAML would read it as another type
 
 ## 2026-10-03
 

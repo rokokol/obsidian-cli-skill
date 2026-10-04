@@ -212,9 +212,9 @@ Every alias maps to an array of paths, so a collision is an entry with more than
 
 YAML reads `- 34984` as a number, and Obsidian keeps only the string items of `aliases` — so that alias is not one, in the app or anywhere else. Measured on a live vault with exactly that entry: the index holds `34984` as a number, and the app's own `aliases` command lists no numeric alias at all. A link `[[34984]]` then resolves to nothing. Quote it — `- "34984"` — and quote any alias YAML would otherwise read as something other than text
 
-### `processFrontMatter` puts a new key last and quotes only what YAML would misread
+### `processFrontMatter` puts a new key last
 
-The callback edits a plain object, and the app writes that object back in its own key order. A key the note did not have goes after every existing key, whatever order the vault expects. Quotes go only on a string that YAML would otherwise read as another type. Measured on a note with `title`, `up` and `aliases`, adding `prev` and a list:
+The callback edits a plain object, and the app writes that object back in its own key order. A key the note did not have goes after every existing key, whatever order the vault expects. Measured on a note with `title`, `up` and `aliases`, adding `prev` and a list:
 
 ```bash
 obsidian-cli eval code='(async()=>{const f=app.vault.getAbstractFileByPath("note.md");await app.fileManager.processFrontMatter(f,fm=>{fm.prev="[[B]]";fm.lectures=["140.1","П2","3","-","true","2026-10-04"]});return await app.vault.read(f)})()'
@@ -237,9 +237,9 @@ lectures:
 ---
 ```
 
-`prev` lands after `aliases`, not beside `up`. A number, a boolean and a bare `-` keep their quotes, while `П2` and a date go bare: Obsidian reads the date back as a string, but a vault convention that quotes every item of a field is broken without a warning
+`prev` lands after `aliases`, not beside `up`. To fix the order, rebuild the object inside the callback: copy it, delete every key, and set them again in the order the vault expects. The writer keeps insertion order, so the file then follows the list
 
-To fix the order, rebuild the object inside the callback: copy it, delete every key, and set them again in the order the vault expects. The writer keeps insertion order, so the file then follows the list. A quoting convention is checked in the file after the write, because no value passed to the callback forces quotes
+The quoting in the same output is correct YAML, not a defect. The writer quotes a string only where YAML would read it as another type: a number, a boolean, a bare `-`. `П2` and the date go bare, and the app reads every item back as the string it was given
 
 ## Renaming and moving
 

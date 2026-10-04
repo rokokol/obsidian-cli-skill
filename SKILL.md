@@ -77,7 +77,6 @@ Write through the app — a CLI command, or `vault.modify` under `eval` — when
   eval code='(async()=>{const f=app.vault.getAbstractFileByPath("folder/note.md");await app.fileManager.processFrontMatter(f,fm=>{fm.aliases=["Smith, John","Plain"]});return "ok"})()'
   ```
 
-- **`processFrontMatter` puts a new key last and quotes a string only where YAML would misread it.** A `prev` added to a note lands after `aliases`, and `П2` or a date goes bare while `"3"` keeps its quotes. Where the vault fixes the key order, delete every key in the callback and set them again in order; check a quoting convention in the file after the write
 - **Renaming and moving are writes to every note that links to the one being renamed.** `rename` and `move` have the app do it, and it rewrites each incoming `[[link]]` to the new name; a filesystem `mv` reaches none of them and leaves the whole vault pointing at a name that no longer exists
 - **Give `rename name=` and `move to=` the extension.** They add `.md` only to a name without a dot, so `name="01. Intro"` makes a file with the extension ` intro`, and it drops out of the note index
 - **A renamed folder leaves its subfolders unwatched.** `rename` and `move` refuse folders, and after `app.fileManager.renameFile` under `eval`, files written into its subfolders from outside the app never reach the index. Repair the watchers right after the rename — the code is in [`references/pitfalls.md`](references/pitfalls.md#a-renamed-folder-leaves-its-subfolders-unwatched)
