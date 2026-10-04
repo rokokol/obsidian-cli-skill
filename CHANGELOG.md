@@ -2,6 +2,12 @@
 
 Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dated rather than numbered, and with no `Unreleased` section — this repository is read at whatever revision you have checked out, so whatever is on the default branch is what every reader already has
 
+## 2026-10-04
+
+### Added
+
+- `references/pitfalls.md`, "Frontmatter": `processFrontMatter` writes a key the note did not have after every existing key, and quotes a string only where YAML would read it as another type, so `П2` and a date go bare. The entry gives the measured output and the way to rebuild the key order inside the callback. `SKILL.md` names it under Writing
+
 ## 2026-10-03
 
 ### Added
