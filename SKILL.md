@@ -85,7 +85,7 @@ Write through the app — a CLI command, or `vault.modify` under `eval` — when
 ## Reference
 
 - [`references/commands.md`](references/commands.md) — output shape, counting semantics and one worked example per command group, all measured on a live vault. What `help` does not tell you
-- [`references/pitfalls.md`](references/pitfalls.md) — every trap above with its reproduction, plus setup problems and the places the official documentation and the local build disagree
+- [`references/pitfalls.md`](references/pitfalls.md) — the reproduction and measurement behind each trap, traps too narrow to name here, setup problems, and the places the official documentation and the local build disagree
 - [`references/obsi.md`](references/obsi.md) — the wrapper in full: the traps it absorbs, how `find` ranks what it returns, what each `graph` query can and cannot see, and the measurements behind its defaults. The flags themselves are in `obsi.sh --help`, which sends the reader here rather than repeating it
 - [`references/plugin-dev.md`](references/plugin-dev.md) — the reload, errors, console and inspect loop for a plugin or theme, with what `help` leaves out
 

@@ -8,6 +8,10 @@ Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), d
 
 - `references/pitfalls.md`, "Frontmatter": `processFrontMatter` writes a key the note did not have after every existing key. The entry gives the measured output and the way to rebuild the key order inside the callback, and notes that its quoting is correct YAML: a string is quoted only where YAML would read it as another type
 
+### Changed
+
+- `references/pitfalls.md` no longer restates the rules and actions `SKILL.md` gives: each entry keeps its mechanism, its reproduction and the measurements `SKILL.md` lacks. `SKILL.md` describes the file as the evidence behind each trap and the traps too narrow to name there, not as a copy of the traps above
+
 ## 2026-10-03
 
 ### Added

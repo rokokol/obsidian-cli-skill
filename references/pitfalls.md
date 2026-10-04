@@ -14,7 +14,7 @@ Error: File "No Such Note 98765" not found.
 exit=0
 ```
 
-The message goes to **stdout**, so `2>/dev/null` hides nothing and `$(…)` captures the error as if it were data. `set -e` and `if obsidian-cli …; then` never fire. Test for the `Error: ` prefix
+The message goes to **stdout**, so `2>/dev/null` hides nothing and `$(…)` captures the error as if it were data
 
 ### An unknown parameter silently changes the question
 
@@ -27,7 +27,7 @@ $ obsidian-cli backlinks fil=Garden total
 5
 ```
 
-Both look like answers. The second is the backlink count of whatever note was open at the time. Nothing distinguishes them in the output — this is the strongest argument for passing `path=` and checking the result against something known
+Both look like answers. The second is the backlink count of whatever note was open at the time, and nothing distinguishes them in the output
 
 ### Indexing is asynchronous, including through the CLI
 
@@ -38,7 +38,7 @@ A graph query issued immediately after a write can be answered from the pre-writ
 | immediately | 11 | 9 |
 | after 0.3 s | 20 | 0 |
 
-Writing the file directly with a shell redirect behaves the same way: stale at 0 s, fresh from 0.2 s. Neither route makes the index synchronous, so re-read before reporting success. What does separate the two routes is an open editor, below
+Writing the file directly with a shell redirect behaves the same way: stale at 0 s, fresh from 0.2 s. Neither route makes the index synchronous. What does separate the two routes is an open editor, below
 
 ### A direct write under an open editor can splice the file
 
@@ -103,7 +103,7 @@ $ obsidian-cli eval code='JSON.stringify({byAlias:app.metadataCache.getFirstLink
 => {"byAlias":null}
 ```
 
-Two consequences: `unresolved` over-reports broken links, and `backlinks` under-reports neighbours. Before treating an unresolved target as a typo, check it against `aliases`. On the vault measured, 2 of 60 unresolved targets were live aliases
+Two consequences: `unresolved` over-reports broken links, and `backlinks` under-reports neighbours. On the vault measured, 2 of 60 unresolved targets were live aliases
 
 ### Links inside fenced code blocks do not exist
 
@@ -133,7 +133,7 @@ The substitute is manual: `search query="<name>"` for the note's name and each o
 
 ### `total` counts different things per command
 
-`backlinks … total` counts occurrences (12 across 11 files), `orphans total` and `unresolved total` count unique targets, `links … total` counts unique targets after deduplication and anchor stripping. Use `counts` where occurrences are what is wanted
+`links … total` counts unique targets after deduplication and anchor stripping
 
 ### Filenames resolve without regard to case
 
@@ -150,7 +150,7 @@ One target in `links`, because targets are deduplicated, and three occurrences i
 
 ### Anchors never survive
 
-`[[Note#Heading|label]]` is reported as `Note.md`. There is no command that returns the anchor, so unused-heading analysis cannot be built on `links`
+No command returns the anchor of a link, so unused-heading analysis cannot be built on `links`
 
 ## Frontmatter
 
@@ -166,7 +166,7 @@ $ head -3 note.md
 tags: alpha, beta
 ```
 
-With `type=list` the same call writes a proper block sequence. `property:set` writes lists correctly when told the type and corrupts an existing list when not told
+With `type=list` the same call writes a proper block sequence
 
 ### With `type=list` the comma cannot be escaped
 
@@ -177,14 +177,6 @@ The comma is the item separator and there is no escape. Both attempts damage the
 | `value="Smith, John" type=list` | two items: `Smith`, `John` |
 | `value='Smith\, John' type=list` | two items: `Smith\`, `John` |
 | `value='"Smith, John"' type=list` | two items: `'"Smith'`, `John"` |
-
-A list value containing a comma cannot be written with `property:set` at all. `property:set` also replaces the whole list rather than appending to it
-
-The way through is the app's own API, which writes correct YAML for any value and keeps the index consistent:
-
-```bash
-obsidian-cli eval code='(async()=>{const f=app.vault.getAbstractFileByPath("note.md");await app.fileManager.processFrontMatter(f,fm=>{fm.aliases=["Smith, John","Plain"]});return "ok"})()'
-```
 
 ### An alias on two files collapses into one comma-joined line
 
@@ -256,7 +248,7 @@ $ obsidian-cli eval code='(()=>{const f=app.vault.getAbstractFileByPath("Notes/0
 => {"ext":" intro","md":false}
 ```
 
-The file drops out of the markdown index, so links, tags and properties no longer see it. `move to="Notes/02. Moved"` did the same. Always pass the name with its extension: `rename path="Notes/01. Intro" name="01. Intro.md"` puts the note back
+The file drops out of the markdown index, so links, tags and properties no longer see it. `move to="Notes/02. Moved"` did the same, and `rename path="Notes/01. Intro" name="01. Intro.md"` puts the note back
 
 ### A folder is renamed only through `eval`
 
@@ -293,8 +285,8 @@ After it, the missed files and the folder made by `mkdir` were in the index, the
 
 - **`all` on `orphans` and `deadends` changes nothing.** Non-markdown files are counted with or without it; output is byte-identical. The official documentation does not list the flag at all, which fits
 - **`folders` counts the vault root**, printing `/` first, so it is one higher than `vault info=folders`
-- **The command set is not fixed.** `daily:*`, `unique`, `web`, `workspaces`, `publish:*` and `sync:*` are documented but absent unless their core plugin or service is enabled — locally 92 commands against the 130+ that circulate in third-party skills. `help` is the only accurate list
-- **A vault name as a bare first argument is not accepted**, despite appearing in third-party documentation. `vault=<name>` before the command word is the form that works
+- **The documented command set is larger than the local one**: 92 commands here against the 130+ that circulate in third-party skills, the rest waiting on a core plugin or service
+- **Third-party documentation shows a vault name as a bare first argument**, which the CLI rejects
 
 ## Setup
 
@@ -310,7 +302,7 @@ The socket is `$XDG_RUNTIME_DIR/.obsidian-cli.sock`, and `~/.flatpak/md.obsidian
 
 ### The binary may not be called `obsidian`
 
-Where the app registers itself it installs `obsidian` (Linux: a copy at `~/.local/bin/obsidian`). Where a package manager ships it, the client is `obsidian-cli` and `obsidian` is the **GUI launcher** — on the machine this was written on, a wrapper around `electron app.asar`. Running `obsidian help` there opens a second window instead of answering. Resolve the name once and verify it answers `version`
+Where the app registers itself it installs `obsidian` (Linux: a copy at `~/.local/bin/obsidian`). Where a package manager ships it, the client is `obsidian-cli` and `obsidian` is the **GUI launcher** — on the machine this was written on, a wrapper around `electron app.asar`. Running `obsidian help` there opens a second window instead of answering
 
 ### "Set up CLI" can fail while the CLI works
 
