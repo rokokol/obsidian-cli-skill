@@ -2,6 +2,12 @@
 
 Kept in the shape of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dated rather than numbered, and with no `Unreleased` section — this repository is read at whatever revision you have checked out, so whatever is on the default branch is what every reader already has
 
+## 2026-10-07
+
+### Changed
+
+- `SKILL.md`, "Confirm the app is running", and `references/pitfalls.md`, "Without a running app": where the client is the app's own binary, a call with no app running starts one that never answers, and only a `timeout` ends the call with exit 124. Exit 1 with "unable to find Obsidian" holds only for a separate client
+
 ## 2026-10-04
 
 ### Added

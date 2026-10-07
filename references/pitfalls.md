@@ -300,6 +300,18 @@ exit=1
 
 The socket is `$XDG_RUNTIME_DIR/.obsidian-cli.sock`, and `~/.flatpak/md.obsidian.Obsidian/xdg-run/.obsidian-cli.sock` for a flatpak install. **The documented auto-launch did not happen** on a packaged install: the process count was unchanged before and after, and the command failed instead. Documentation says the first command launches Obsidian; do not rely on it
 
+Where the CLI and the app are one binary, the call does start the app, and it does not return. On NixOS with the packaged Obsidian 1.13.7, `obsidian` is both, and with no Obsidian process running a call printed the app's own start-up log and then waited until `timeout` ended it:
+
+```console
+$ timeout 20 obsidian vault=myWiki version; echo "exit=$?"
+… Loaded updated app /home/<user>/.config/obsidian/obsidian-1.14.4.asar
+… Checking for update using Github
+[mx.daemon] Logtape configured successfully
+exit=124
+```
+
+No window appeared, and the next calls did the same until the user started Obsidian by hand. So exit 1 means no app, and exit 124 with start-up log lines on stderr means the call started one in the background and is stuck in it: start the app normally, then call again
+
 ### The binary may not be called `obsidian`
 
 Where the app registers itself it installs `obsidian` (Linux: a copy at `~/.local/bin/obsidian`). Where a package manager ships it, the client is `obsidian-cli` and `obsidian` is the **GUI launcher** — on the machine this was written on, a wrapper around `electron app.asar`. Running `obsidian help` there opens a second window instead of answering

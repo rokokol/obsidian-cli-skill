@@ -13,7 +13,7 @@ Written against Obsidian **1.13.7 (installer 1.13.4)** on Linux. Behaviour below
 ## Before the first call
 
 1. **Find the binary.** The name depends on how Obsidian was installed: the app registers `obsidian`, but package managers may ship the client as `obsidian-cli` while `obsidian` stays the GUI launcher. Run `command -v obsidian-cli obsidian`, then confirm the candidate answers `version` with two numbers. Calling a GUI launcher instead opens a second window
-2. **Confirm the app is running.** With no reachable app every call prints `The CLI is unable to find Obsidian. Please make sure Obsidian is running and try again` and exits **1** — the only condition that sets a non-zero status. Do not expect the CLI to start Obsidian for you; on a packaged install it does not
+2. **Confirm the app is running.** With no reachable app a separate client prints `The CLI is unable to find Obsidian. Please make sure Obsidian is running and try again` and exits **1** — the only condition that sets a non-zero status. Where the client is the app's own binary, the call instead starts an app that never answers it, and only a `timeout` ends it. Do not expect the CLI to start Obsidian for you — [`references/pitfalls.md`](references/pitfalls.md#without-a-running-app)
 3. **Ask the app what it can do.** `<cli> help` lists the commands available *right now*. The list is not fixed: `daily:*`, `unique`, `web`, `workspaces`, `publish:*` and `sync:*` appear only when the matching core plugin or service is enabled. Treat `help` as the reference and never guess a command from documentation
 
 ## The rules that prevent wrong answers
