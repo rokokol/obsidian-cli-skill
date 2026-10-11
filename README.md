@@ -101,6 +101,8 @@ The references: [`references/commands.md`](references/commands.md) for output sh
 
 Obsidian publishes no skills as an organisation, but [`kepano/obsidian-skills`](https://github.com/kepano/obsidian-skills) — from Steph Ango, Obsidian's CEO, under his personal account — is the closest thing to a first-party one, and it covers ground this repository does not: Obsidian Flavored Markdown, Bases, JSON Canvas, and the plugin development cycle. Its CLI skill is an introduction to the syntax; this one starts where that ends, at what the commands actually return
 
+The project was introduced in [the Obsidian Forum](https://forum.obsidian.md/t/obsidian-cli-skill-with-my-best-practices/119334)
+
 ## Tests
 
 ```bash
